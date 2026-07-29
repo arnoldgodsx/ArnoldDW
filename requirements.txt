@@ -3,4 +3,5 @@ yt-dlp
 pillow
 requests
 imageio-ffmpeg
+instaloader
 pyinstaller

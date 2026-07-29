@@ -1,5 +1,6 @@
 """Arnold DW - YouTube Video/Audio Downloader"""
 import io
+import html
 import json
 import os
 import re
@@ -13,6 +14,7 @@ from tkinter import filedialog
 
 import customtkinter as ctk
 from PIL import Image, ImageDraw, ImageOps
+import instaloader
 import requests
 import yt_dlp
 
@@ -26,6 +28,11 @@ def resource_path(*parts):
 
 
 ICON_PATH = resource_path("logo", "icon.ico")
+APP_LOGO_PATH = resource_path("logo", "icons8-fire-96.png")
+YOUTUBE_LOGO_PATH = resource_path("logo", "youtube.png")
+INSTAGRAM_LOGO_PATH = resource_path("logo", "instagram.png")
+TIKTOK_LOGO_PATH = resource_path("logo", "tiktok.png")
+BACK_ICON_PATH = resource_path("logo", "back.png")
 FFMPEG_PATH = resource_path("bin", "ffmpeg.exe")
 
 APP_NAME = "Arnold DW"
@@ -61,6 +68,7 @@ def save_download_dir(path):
 
 BG = "#000000"
 SURFACE = "#131316"
+HOME_CARD = "#0C0C0F"
 SURFACE_2 = "#1C1C21"
 SURFACE_3 = "#26262D"
 BORDER = "#2C2C34"
@@ -74,11 +82,24 @@ SUCCESS = "#30D158"
 ERROR = "#FF453A"
 
 FONT_FAMILY = "Segoe UI"
+APP_WIDTH = 480
+APP_HEIGHT = 720
 
 YOUTUBE_RE = re.compile(
     r"^(https?://)?(www\.|m\.|music\.)?"
     r"(youtube\.com/(watch\?v=|shorts/|embed/|live/)|youtu\.be/)[\w\-]+",
     re.IGNORECASE,
+)
+INSTAGRAM_POST_RE = re.compile(
+    r"instagram\.com/(?:p|reel|reels|tv)/([A-Za-z0-9_-]+)",
+    re.IGNORECASE,
+)
+INSTAGRAM_PROFILE_RE = re.compile(
+    r"instagram\.com/([A-Za-z0-9._]+)",
+    re.IGNORECASE,
+)
+INSTAGRAM_CRAWLER_USER_AGENT = (
+    "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)"
 )
 
 QUALITY_OPTIONS = ["4K", "1440p", "1080p", "720p", "480p", "360p", "240p", "144p"]
@@ -90,7 +111,7 @@ QUALITY_HEIGHTS = {
 AUDIO_OPTIONS = ["320 kbps", "192 kbps", "128 kbps"]
 AUDIO_BITRATE = {"320 kbps": "320", "192 kbps": "192", "128 kbps": "128"}
 
-PREVIEW_W, PREVIEW_H = 452, 254
+PREVIEW_W, PREVIEW_H = 360, 203
 SPINNER_DIAMETER = 48
 SPINNER_WIDTH = 5
 
@@ -239,6 +260,52 @@ def friendly_error(exc: Exception) -> str:
     if "network" in low or "connection" in low or "resolve host" in low:
         return "İnternet bağlantısı sorunu tespit edildi."
     return "Bir hata oluştu. Lütfen bağlantıyı kontrol edip tekrar deneyin."
+
+
+def instagram_friendly_error(exc: Exception) -> str:
+    low = str(exc).lower()
+    if "profile does not exist" in low or "not found" in low:
+        return "Instagram kullanıcısı veya gönderisi bulunamadı."
+    if "private profile" in low or "is private" in low:
+        return "Bu hesap gizli. Yalnızca profil fotoğrafı kullanılabilir."
+    if "login" in low or "401" in low or "403" in low:
+        return "Bu içeriğe oturum açmadan erişilemiyor."
+    if (
+        "429" in low
+        or "too many requests" in low
+        or "please wait a few minutes" in low
+    ):
+        return "Instagram geçici olarak çok fazla istek algıladı. Biraz sonra deneyin."
+    if "connection" in low or "network" in low or "timeout" in low:
+        return "Instagram bağlantısı kurulamadı. İnternet bağlantınızı kontrol edin."
+    return "Instagram içeriği alınamadı. Linki veya kullanıcı adını kontrol edin."
+
+
+def instagram_post_media(post):
+    """Return original media URLs represented by an Instaloader Post."""
+    media = []
+    if post.typename == "GraphSidecar":
+        for index, node in enumerate(post.get_sidecar_nodes(), start=1):
+            media.append({
+                "index": index,
+                "is_video": bool(node.is_video),
+                "url": node.video_url if node.is_video else node.display_url,
+                "thumbnail_url": node.display_url,
+            })
+    else:
+        media.append({
+            "index": 1,
+            "is_video": bool(post.is_video),
+            "url": post.video_url if post.is_video else post.url,
+            "thumbnail_url": post.url,
+        })
+    return media
+
+
+def safe_filename_part(value):
+    value = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", str(value))
+    value = re.sub(r"\s+", " ", value).strip(" .")
+    return value[:100] or "instagram"
 
 
 class ThemedDropdown(ctk.CTkFrame):
@@ -479,6 +546,8 @@ class ArnoldDW(ctk.CTk):
         self.cancel_event = None
 
         self.download_dir = load_download_dir()
+        self.current_screen = "home"
+        self.instagram_profile_cache = {}
 
         self._configure_window()
         self._build_ui()
@@ -492,7 +561,7 @@ class ArnoldDW(ctk.CTk):
 
     def _configure_window(self):
         self.title("Arnold DW")
-        self.geometry("540x600")
+        self.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
         self.resizable(False, False)
         self.configure(fg_color=BG)
 
@@ -524,6 +593,909 @@ class ArnoldDW(ctk.CTk):
     # ------------------------------------------------------------------
 
     def _build_ui(self):
+        self._show_home()
+
+    def _clear_screen(self):
+        for child in self.winfo_children():
+            child.destroy()
+
+    def _show_home(self):
+        self._clear_screen()
+        self.current_screen = "home"
+        self.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
+
+        root = ctk.CTkFrame(self, fg_color=BG)
+        root.pack(fill="both", expand=True, padx=28, pady=(30, 14))
+
+        header = ctk.CTkFrame(root, fg_color="transparent")
+        header.pack()
+        app_logo = Image.open(APP_LOGO_PATH).convert("RGBA")
+        self.home_app_logo = ctk.CTkImage(
+            light_image=app_logo,
+            dark_image=app_logo,
+            size=(86, 86),
+        )
+        ctk.CTkLabel(header, text="", image=self.home_app_logo).pack()
+
+        ctk.CTkLabel(
+            header,
+            text="Arnold DW",
+            text_color=TEXT_FAINT,
+            font=(FONT_FAMILY, 27, "bold"),
+        ).pack(pady=(6, 0))
+
+        self.home_platform_images = {}
+        cards = ctk.CTkFrame(root, fg_color="transparent")
+        cards.place(relx=0.5, rely=0.5, anchor="center", relwidth=1)
+
+        platforms = (
+            ("YouTube", YOUTUBE_LOGO_PATH, self._show_youtube),
+            ("Instagram", INSTAGRAM_LOGO_PATH, self._show_instagram),
+            ("TikTok", TIKTOK_LOGO_PATH, None),
+        )
+
+        for index, (name, logo_path, command) in enumerate(platforms):
+            logo = Image.open(logo_path).convert("RGBA")
+            platform_image = ctk.CTkImage(
+                light_image=logo,
+                dark_image=logo,
+                size=(40, 40),
+            )
+            self.home_platform_images[name] = platform_image
+
+            card = ctk.CTkButton(
+                cards,
+                text=name,
+                image=platform_image,
+                compound="left",
+                anchor="w",
+                command=command,
+                height=64,
+                corner_radius=10,
+                border_width=1,
+                border_color=BORDER,
+                border_spacing=18,
+                fg_color=HOME_CARD,
+                hover_color=SURFACE,
+                text_color=TEXT,
+                font=(FONT_FAMILY, 17, "bold"),
+            )
+            card.pack(fill="x", pady=(0, 22 if index < 2 else 0))
+
+        self.update_idletasks()
+        header_bottom = header.winfo_y() + header.winfo_height()
+        available_bottom = root.winfo_height()
+        lower_area_center = (header_bottom + available_bottom) / 2
+        cards.place_configure(
+            rely=lower_area_center / available_bottom,
+            y=0,
+        )
+
+    def _show_youtube(self):
+        self._clear_screen()
+        self.current_screen = "youtube"
+        self._build_youtube_ui()
+
+    def _back_to_home(self):
+        if self._is_downloading or self._processing_active:
+            return
+        if self.debounce_job is not None:
+            self.after_cancel(self.debounce_job)
+            self.debounce_job = None
+        self.request_id += 1
+        self._stop_preview_spinner()
+        self._show_home()
+
+    # ------------------------------------------------------------------
+    # Instagram
+    # ------------------------------------------------------------------
+
+    def _show_instagram(self):
+        self._clear_screen()
+        self.current_screen = "instagram"
+        self.current_info = None
+        self.current_url = None
+        self.instagram_mode = None
+        self.instagram_loader = None
+        self.instagram_post = None
+        self.instagram_profile = None
+        self.instagram_media = []
+        self.instagram_media_vars = []
+        self.instagram_category_vars = {}
+        self.instagram_preview_images = []
+
+        self.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
+        root = ctk.CTkFrame(self, fg_color=BG)
+        root.pack(fill="both", expand=True, padx=28, pady=(30, 14))
+
+        self._build_instagram_input(root)
+
+        self.instagram_preview_card = ctk.CTkFrame(
+            root,
+            fg_color=SURFACE,
+            corner_radius=10,
+            border_width=1,
+            border_color=BORDER,
+            height=350,
+        )
+        self.instagram_preview_card.pack(fill="x", pady=(0, 14))
+        self.instagram_preview_card.pack_propagate(False)
+
+        self.instagram_preview_content = ctk.CTkFrame(
+            self.instagram_preview_card,
+            fg_color="transparent",
+        )
+        self.instagram_preview_content.pack(fill="both", expand=True, padx=14, pady=14)
+        self._show_instagram_empty()
+
+        self._build_save_location(root)
+
+        self.instagram_download_btn = ctk.CTkButton(
+            root,
+            text="İndir",
+            command=self._on_instagram_download,
+            height=50,
+            corner_radius=12,
+            state="disabled",
+            fg_color=SURFACE_3,
+            hover_color=ACCENT_HOVER,
+            text_color=TEXT,
+            text_color_disabled=TEXT_FAINT,
+            font=(FONT_FAMILY, 15, "bold"),
+        )
+        self.instagram_download_btn.pack(fill="x")
+
+    def _build_instagram_input(self, parent):
+        row = ctk.CTkFrame(parent, fg_color="transparent", height=46)
+        row.pack(fill="x", pady=(0, 4))
+        row.pack_propagate(False)
+
+        back_icon = Image.open(BACK_ICON_PATH).convert("RGBA")
+        self.instagram_back_icon_image = ctk.CTkImage(
+            light_image=back_icon,
+            dark_image=back_icon,
+            size=(22, 22),
+        )
+        self.back_btn = ctk.CTkButton(
+            row,
+            text="",
+            image=self.instagram_back_icon_image,
+            command=self._back_to_home,
+            width=46,
+            height=46,
+            corner_radius=10,
+            border_width=1,
+            border_color=BORDER,
+            fg_color=SURFACE,
+            hover_color=SURFACE_2,
+            text_color_disabled=TEXT_FAINT,
+        )
+        self.back_btn.pack(side="left", padx=(0, 8))
+
+        self.instagram_entry = ctk.CTkEntry(
+            row,
+            placeholder_text="Instagram linki veya kullanıcı adı...",
+            height=46,
+            corner_radius=10,
+            fg_color=SURFACE,
+            border_width=1,
+            border_color=BORDER,
+            text_color=TEXT,
+            placeholder_text_color=TEXT_FAINT,
+            font=(FONT_FAMILY, 13),
+        )
+        self.instagram_entry.pack(side="left", fill="both", expand=True)
+        self.instagram_entry.bind("<KeyRelease>", self._on_instagram_input_changed)
+        self.instagram_entry.bind(
+            "<<Paste>>",
+            lambda e: self.after(10, self._on_instagram_input_changed),
+        )
+        self.instagram_entry.bind(
+            "<FocusIn>",
+            lambda e: self.instagram_entry.configure(border_color=ACCENT),
+        )
+        self.instagram_entry.bind(
+            "<FocusOut>",
+            lambda e: self.instagram_entry.configure(border_color=BORDER),
+        )
+
+        self.instagram_clear_btn = ctk.CTkButton(
+            row,
+            text="✕",
+            width=34,
+            height=34,
+            corner_radius=8,
+            fg_color=SURFACE_2,
+            hover_color=SURFACE_3,
+            border_width=0,
+            text_color=TEXT_MUTED,
+            text_color_disabled=TEXT_FAINT,
+            font=(FONT_FAMILY, 13),
+            command=self._clear_instagram_input,
+        )
+
+        self.instagram_status_label = ctk.CTkLabel(
+            parent,
+            text="",
+            text_color=TEXT_MUTED,
+            font=(FONT_FAMILY, 12),
+            anchor="w",
+            justify="left",
+        )
+        self.instagram_status_label.pack(fill="x", pady=(0, 4))
+
+    def _replace_instagram_preview(self):
+        for child in self.instagram_preview_content.winfo_children():
+            child.destroy()
+        self.instagram_preview_images = []
+
+    def _show_instagram_empty(self):
+        self._replace_instagram_preview()
+        empty = ctk.CTkFrame(self.instagram_preview_content, fg_color="transparent")
+        empty.place(relx=0.5, rely=0.5, anchor="center")
+        ctk.CTkLabel(
+            empty,
+            text="🎬",
+            font=(FONT_FAMILY, 34),
+            text_color=TEXT_FAINT,
+        ).pack()
+        ctk.CTkLabel(
+            empty,
+            text="Instagram önizlemesi burada görünecek",
+            text_color=TEXT_FAINT,
+            font=(FONT_FAMILY, 13),
+        ).pack(pady=(8, 0))
+
+    def _show_instagram_loading(self):
+        self._replace_instagram_preview()
+        loading = ctk.CTkFrame(self.instagram_preview_content, fg_color="transparent")
+        loading.place(relx=0.5, rely=0.5, anchor="center")
+        ctk.CTkLabel(
+            loading,
+            text="Yükleniyor...",
+            text_color=TEXT_MUTED,
+            font=(FONT_FAMILY, 13, "bold"),
+        ).pack()
+
+    def _set_instagram_status(self, text, color=TEXT_MUTED):
+        self.instagram_status_label.configure(text=text, text_color=color)
+
+    def _update_instagram_clear_button(self):
+        has_content = bool(self.instagram_entry.get().strip())
+        if has_content and not self.instagram_clear_btn.winfo_ismapped():
+            self.instagram_clear_btn.place(
+                in_=self.instagram_entry,
+                relx=1.0,
+                rely=0.5,
+                anchor="e",
+                x=-6,
+            )
+        elif not has_content and self.instagram_clear_btn.winfo_ismapped():
+            self.instagram_clear_btn.place_forget()
+
+    def _clear_instagram_input(self):
+        if self.debounce_job is not None:
+            self.after_cancel(self.debounce_job)
+            self.debounce_job = None
+        self.request_id += 1
+        self.instagram_entry.delete(0, "end")
+        self.instagram_entry.focus_set()
+        self.instagram_mode = None
+        self.instagram_media = []
+        self.instagram_category_vars = {}
+        self._set_instagram_status("")
+        self.instagram_download_btn.configure(
+            state="disabled",
+            fg_color=SURFACE_3,
+            text="İndir",
+        )
+        self._show_instagram_empty()
+        self._update_instagram_clear_button()
+
+    def _on_instagram_input_changed(self, event=None):
+        self._update_instagram_clear_button()
+        if self.debounce_job is not None:
+            self.after_cancel(self.debounce_job)
+            self.debounce_job = None
+
+        value = self.instagram_entry.get().strip()
+        if not value:
+            self._clear_instagram_input()
+            return
+
+        self.request_id += 1
+        rid = self.request_id
+        self._set_instagram_status("")
+        self.instagram_download_btn.configure(state="disabled", fg_color=SURFACE_3)
+        self._show_instagram_loading()
+        self.debounce_job = self.after(
+            1200,
+            lambda: self._start_instagram_resolve(value, rid),
+        )
+
+    def _start_instagram_resolve(self, value, rid):
+        self.debounce_job = None
+        threading.Thread(
+            target=self._instagram_resolve_worker,
+            args=(value, rid),
+            daemon=True,
+        ).start()
+
+    def _new_instagram_loader(self):
+        return instaloader.Instaloader(
+            sleep=False,
+            max_connection_attempts=1,
+            request_timeout=15,
+            user_agent=INSTAGRAM_CRAWLER_USER_AGENT,
+            iphone_support=False,
+            download_pictures=False,
+            download_videos=False,
+            download_video_thumbnails=False,
+            download_geotags=False,
+            download_comments=False,
+            save_metadata=False,
+            compress_json=False,
+            quiet=True,
+        )
+
+    def _instagram_public_profile(self, loader, username):
+        profile_url = f"https://www.instagram.com/{username}/"
+        response = requests.get(
+            profile_url,
+            headers={"User-Agent": INSTAGRAM_CRAWLER_USER_AGENT},
+            timeout=15,
+        )
+        response.raise_for_status()
+        page = response.text
+
+        def meta_content(property_name):
+            match = re.search(
+                rf'<meta[^>]+property=["\']{re.escape(property_name)}["\']'
+                rf'[^>]+content=["\']([^"\']+)',
+                page,
+                re.IGNORECASE,
+            )
+            if match is None:
+                match = re.search(
+                    rf'<meta[^>]+content=["\']([^"\']+)["\'][^>]+'
+                    rf'property=["\']{re.escape(property_name)}["\']',
+                    page,
+                    re.IGNORECASE,
+                )
+            return html.unescape(match.group(1)) if match else ""
+
+        user_id_match = re.search(r"profilePage_([0-9]+)", page)
+        if user_id_match is None:
+            user_id_match = re.search(r'"user_id":"?([0-9]+)', page)
+        if user_id_match is None:
+            raise instaloader.ProfileNotExistsException(
+                f"Profile does not exist: {username}"
+            )
+
+        title = meta_content("og:title")
+        full_name = title.split("(@", 1)[0].strip() if "(@" in title else username
+        profile_pic_url = meta_content("og:image")
+        user_id = user_id_match.group(1)
+
+        variables = {
+            "data": {
+                "count": 12,
+                "include_relationship_info": True,
+                "latest_besties_reel_media": True,
+                "latest_reel_media": True,
+            },
+            "id": int(user_id),
+            "after": None,
+            "first": 12,
+        }
+        result = loader.context.doc_id_graphql_query(
+            "7950326061742207",
+            variables,
+            referer=profile_url,
+        )
+        user_data = (result.get("data") or {}).get("user") or {}
+        timeline = user_data.get("edge_owner_to_timeline_media")
+        is_private = timeline is None
+        if timeline is None:
+            timeline = {
+                "count": 0,
+                "page_info": {"has_next_page": False, "end_cursor": None},
+                "edges": [],
+            }
+
+        node = {
+            "id": user_id,
+            "username": username,
+            "full_name": full_name,
+            "is_private": is_private,
+            "profile_pic_url": profile_pic_url,
+            "profile_pic_url_hd": profile_pic_url,
+            "edge_owner_to_timeline_media": timeline,
+            "edge_followed_by": {"count": 0},
+            "edge_follow": {"count": 0},
+        }
+        profile = instaloader.Profile(loader.context, node)
+        profile._has_full_metadata = True
+        return profile
+
+    def _instagram_resolve_worker(self, value, rid):
+        try:
+            loader = self._new_instagram_loader()
+            post_match = INSTAGRAM_POST_RE.search(value)
+            if post_match:
+                post = instaloader.Post.from_shortcode(loader.context, post_match.group(1))
+                media = instagram_post_media(post)
+                thumbnails = []
+                for item in media:
+                    image = None
+                    try:
+                        response = requests.get(item["thumbnail_url"], timeout=15)
+                        response.raise_for_status()
+                        image = Image.open(io.BytesIO(response.content)).convert("RGB")
+                    except Exception:
+                        pass
+                    thumbnails.append(image)
+                self.ui_queue.put((
+                    "instagram_post_ok",
+                    rid,
+                    loader,
+                    post,
+                    media,
+                    thumbnails,
+                ))
+                return
+
+            profile_match = INSTAGRAM_PROFILE_RE.search(value)
+            username = profile_match.group(1) if profile_match else value
+            username = username.strip().lstrip("@").strip("/")
+            if not re.fullmatch(r"[A-Za-z0-9._]+", username):
+                raise ValueError("Invalid Instagram username")
+
+            cached = self.instagram_profile_cache.get(username.lower())
+            if cached is not None:
+                cached_loader, cached_profile, cached_avatar = cached
+                self.ui_queue.put((
+                    "instagram_profile_ok",
+                    rid,
+                    cached_loader,
+                    cached_profile,
+                    cached_avatar,
+                ))
+                return
+
+            profile = self._instagram_public_profile(loader, username)
+            avatar = None
+            try:
+                response = requests.get(str(profile.profile_pic_url), timeout=15)
+                response.raise_for_status()
+                avatar = Image.open(io.BytesIO(response.content)).convert("RGB")
+            except Exception:
+                pass
+            self.instagram_profile_cache[username.lower()] = (loader, profile, avatar)
+            self.ui_queue.put(("instagram_profile_ok", rid, loader, profile, avatar))
+        except Exception as exc:
+            self.ui_queue.put(("instagram_err", rid, instagram_friendly_error(exc)))
+
+    def _apply_instagram_post(self, loader, post, media, thumbnails):
+        self.instagram_mode = "post"
+        self.instagram_loader = loader
+        self.instagram_post = post
+        self.instagram_profile = None
+        self.instagram_media = media
+        self.instagram_media_vars = []
+        self._replace_instagram_preview()
+
+        media_type = "Carousel" if len(media) > 1 else ("Video" if media[0]["is_video"] else "Fotoğraf")
+        ctk.CTkLabel(
+            self.instagram_preview_content,
+            text=f"@{post.owner_username}  •  {media_type}",
+            text_color=TEXT,
+            font=(FONT_FAMILY, 14, "bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 10))
+
+        if len(media) == 1:
+            image = thumbnails[0]
+            if image is not None:
+                preview = make_rounded(image, (300, 230), radius=10)
+                preview_image = ctk.CTkImage(preview, size=(300, 230))
+                self.instagram_preview_images.append(preview_image)
+                ctk.CTkLabel(
+                    self.instagram_preview_content,
+                    text="",
+                    image=preview_image,
+                ).pack()
+            else:
+                ctk.CTkLabel(
+                    self.instagram_preview_content,
+                    text="Önizleme yüklenemedi",
+                    text_color=TEXT_FAINT,
+                    font=(FONT_FAMILY, 13),
+                ).pack(expand=True)
+            self.instagram_media_vars = [ctk.BooleanVar(value=True)]
+        else:
+            toolbar = ctk.CTkFrame(self.instagram_preview_content, fg_color="transparent")
+            toolbar.pack(fill="x", pady=(0, 8))
+            self.instagram_select_all_var = ctk.BooleanVar(value=True)
+            ctk.CTkCheckBox(
+                toolbar,
+                text=f"Tümünü seç ({len(media)})",
+                variable=self.instagram_select_all_var,
+                command=self._toggle_all_instagram_media,
+                width=20,
+                checkbox_width=19,
+                checkbox_height=19,
+                corner_radius=5,
+                fg_color=ACCENT,
+                hover_color=ACCENT_HOVER,
+                border_color=BORDER,
+                text_color=TEXT_MUTED,
+                font=(FONT_FAMILY, 12),
+            ).pack(side="left")
+
+            strip = ctk.CTkScrollableFrame(
+                self.instagram_preview_content,
+                orientation="horizontal",
+                fg_color="transparent",
+                height=225,
+            )
+            strip.pack(fill="both", expand=True)
+
+            for index, (item, image) in enumerate(zip(media, thumbnails), start=1):
+                tile = ctk.CTkFrame(
+                    strip,
+                    fg_color=HOME_CARD,
+                    corner_radius=10,
+                    border_width=1,
+                    border_color=BORDER,
+                    width=120,
+                    height=185,
+                )
+                tile.pack(side="left", padx=(0, 10))
+                tile.pack_propagate(False)
+
+                if image is not None:
+                    thumb = make_rounded(image, (104, 120), radius=8)
+                    thumb_image = ctk.CTkImage(thumb, size=(104, 120))
+                    self.instagram_preview_images.append(thumb_image)
+                    ctk.CTkLabel(tile, text="", image=thumb_image).pack(pady=(8, 4))
+                else:
+                    ctk.CTkLabel(
+                        tile,
+                        text="Önizleme yok",
+                        text_color=TEXT_FAINT,
+                        font=(FONT_FAMILY, 11),
+                        width=104,
+                        height=120,
+                    ).pack(pady=(8, 4))
+
+                var = ctk.BooleanVar(value=True)
+                self.instagram_media_vars.append(var)
+                ctk.CTkCheckBox(
+                    tile,
+                    text=f"{index}. {'Video' if item['is_video'] else 'Fotoğraf'}",
+                    variable=var,
+                    command=self._update_instagram_download_state,
+                    checkbox_width=18,
+                    checkbox_height=18,
+                    corner_radius=5,
+                    fg_color=ACCENT,
+                    hover_color=ACCENT_HOVER,
+                    border_color=BORDER,
+                    text_color=TEXT_MUTED,
+                    font=(FONT_FAMILY, 11),
+                ).pack(padx=8, pady=(2, 8))
+
+        self._set_instagram_status("")
+        self._update_instagram_download_state()
+
+    def _toggle_all_instagram_media(self):
+        selected = bool(self.instagram_select_all_var.get())
+        for var in self.instagram_media_vars:
+            var.set(selected)
+        self._update_instagram_download_state()
+
+    def _apply_instagram_profile(self, loader, profile, avatar):
+        self.instagram_mode = "profile"
+        self.instagram_loader = loader
+        self.instagram_profile = profile
+        self.instagram_post = None
+        self.instagram_media = []
+        self._replace_instagram_preview()
+
+        header = ctk.CTkFrame(self.instagram_preview_content, fg_color="transparent")
+        header.pack(fill="x", pady=(2, 16))
+        if avatar is not None:
+            rounded = make_rounded(avatar, (72, 72), radius=36)
+            avatar_image = ctk.CTkImage(rounded, size=(72, 72))
+            self.instagram_preview_images.append(avatar_image)
+            ctk.CTkLabel(header, text="", image=avatar_image).pack(side="left", padx=(0, 14))
+
+        text_col = ctk.CTkFrame(header, fg_color="transparent")
+        text_col.pack(side="left", fill="x", expand=True)
+        ctk.CTkLabel(
+            text_col,
+            text=f"@{profile.username}",
+            text_color=TEXT,
+            font=(FONT_FAMILY, 16, "bold"),
+            anchor="w",
+        ).pack(fill="x")
+        if profile.full_name:
+            ctk.CTkLabel(
+                text_col,
+                text=profile.full_name,
+                text_color=TEXT_MUTED,
+                font=(FONT_FAMILY, 12),
+                anchor="w",
+            ).pack(fill="x", pady=(3, 0))
+
+        ctk.CTkLabel(
+            self.instagram_preview_content,
+            text="İNDİRİLEBİLİR KATEGORİLER",
+            text_color=TEXT_FAINT,
+            font=(FONT_FAMILY, 11, "bold"),
+            anchor="w",
+        ).pack(fill="x", pady=(0, 8))
+
+        categories = (
+            ("posts", "Gönderiler / Fotoğraflar"),
+            ("reels", "Reels / Videolar"),
+            ("profile_pic", "Profil Fotoğrafı"),
+        )
+        self.instagram_category_vars = {}
+        for key, label in categories:
+            var = ctk.BooleanVar(value=False)
+            self.instagram_category_vars[key] = var
+            state = "disabled" if profile.is_private and key != "profile_pic" else "normal"
+            checkbox = ctk.CTkCheckBox(
+                self.instagram_preview_content,
+                text=label,
+                variable=var,
+                command=self._update_instagram_download_state,
+                state=state,
+                height=38,
+                corner_radius=6,
+                checkbox_width=20,
+                checkbox_height=20,
+                fg_color=ACCENT,
+                hover_color=ACCENT_HOVER,
+                border_color=BORDER,
+                text_color=TEXT,
+                text_color_disabled=TEXT_FAINT,
+                font=(FONT_FAMILY, 13, "bold"),
+            )
+            checkbox.pack(fill="x", pady=(0, 6))
+
+        if profile.is_private:
+            self._set_instagram_status(
+                "Gizli hesaplarda yalnızca profil fotoğrafı indirilebilir.",
+                TEXT_MUTED,
+            )
+        else:
+            self._set_instagram_status("")
+        self._update_instagram_download_state()
+
+    def _update_instagram_download_state(self):
+        enabled = False
+        if self.instagram_mode == "post":
+            enabled = any(var.get() for var in self.instagram_media_vars)
+        elif self.instagram_mode == "profile":
+            enabled = any(var.get() for var in self.instagram_category_vars.values())
+
+        self.instagram_download_btn.configure(
+            state="normal" if enabled else "disabled",
+            fg_color=ACCENT if enabled else SURFACE_3,
+        )
+
+    def _on_instagram_download(self):
+        if self._is_downloading:
+            if self.cancel_event is not None:
+                self.cancel_event.set()
+            self.instagram_download_btn.configure(
+                state="disabled",
+                fg_color=SURFACE_3,
+                text="İptal ediliyor...",
+            )
+            return
+
+        if self.instagram_mode == "post":
+            selected_media = [
+                item
+                for item, var in zip(self.instagram_media, self.instagram_media_vars)
+                if var.get()
+            ]
+            if not selected_media:
+                return
+            payload = ("post", selected_media)
+        elif self.instagram_mode == "profile":
+            categories = [
+                key for key, var in self.instagram_category_vars.items() if var.get()
+            ]
+            if not categories:
+                return
+            payload = ("profile", categories)
+        else:
+            return
+
+        self._is_downloading = True
+        self.cancel_event = threading.Event()
+        self.back_btn.configure(state="disabled")
+        self.instagram_entry.configure(state="disabled")
+        self.instagram_clear_btn.configure(state="disabled")
+        self.browse_btn.configure(state="disabled")
+        self.instagram_download_btn.configure(
+            state="normal",
+            fg_color=SURFACE_2,
+            hover_color=SURFACE_3,
+            text="İptal Et",
+        )
+        self._set_instagram_status("İndirme başlatılıyor...", TEXT_MUTED)
+
+        threading.Thread(
+            target=self._instagram_download_worker,
+            args=(payload, self.download_dir, self.cancel_event),
+            daemon=True,
+        ).start()
+
+    def _download_instagram_media(self, item, folder, basename, cancel_event):
+        if cancel_event.is_set():
+            raise yt_dlp.utils.DownloadCancelled()
+        extension = ".mp4" if item["is_video"] else ".jpg"
+        path = os.path.join(folder, f"{safe_filename_part(basename)}{extension}")
+        if os.path.exists(path):
+            return False
+
+        response = requests.get(item["url"], stream=True, timeout=30)
+        response.raise_for_status()
+        with open(path, "wb") as output:
+            for chunk in response.iter_content(chunk_size=1024 * 256):
+                if cancel_event.is_set():
+                    output.close()
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        pass
+                    raise yt_dlp.utils.DownloadCancelled()
+                if chunk:
+                    output.write(chunk)
+        return True
+
+    def _download_instagram_post_items(
+        self,
+        post,
+        folder,
+        cancel_event,
+        seen_shortcodes,
+    ):
+        if post.shortcode in seen_shortcodes:
+            return 0
+        seen_shortcodes.add(post.shortcode)
+        count = 0
+        for item in instagram_post_media(post):
+            if not item["url"]:
+                continue
+            basename = (
+                f"instagram_{post.owner_username}_"
+                f"{post.shortcode}_{item['index']:02d}"
+            )
+            if self._download_instagram_media(
+                item,
+                folder,
+                basename,
+                cancel_event,
+            ):
+                count += 1
+        return count
+
+    def _instagram_download_worker(self, payload, download_dir, cancel_event):
+        try:
+            root = download_dir
+            os.makedirs(root, exist_ok=True)
+            downloaded = 0
+
+            if payload[0] == "post":
+                post = self.instagram_post
+                folder = root
+                for position, item in enumerate(payload[1], start=1):
+                    self.ui_queue.put((
+                        "instagram_progress",
+                        f"{position}/{len(payload[1])} indiriliyor...",
+                    ))
+                    basename = (
+                        f"instagram_{post.owner_username}_"
+                        f"{post.shortcode}_{item['index']:02d}"
+                    )
+                    if self._download_instagram_media(
+                        item,
+                        folder,
+                        basename,
+                        cancel_event,
+                    ):
+                        downloaded += 1
+            else:
+                profile = self.instagram_profile
+                categories = payload[1]
+                profile_root = root
+                seen_shortcodes = set()
+
+                if "profile_pic" in categories:
+                    self.ui_queue.put(("instagram_progress", "Profil fotoğrafı indiriliyor..."))
+                    profile_item = {
+                        "is_video": False,
+                        "url": str(profile.profile_pic_url),
+                    }
+                    folder = profile_root
+                    if self._download_instagram_media(
+                        profile_item,
+                        folder,
+                        f"instagram_{profile.username}_profil",
+                        cancel_event,
+                    ):
+                        downloaded += 1
+
+                if "posts" in categories:
+                    folder = profile_root
+                    for index, post in enumerate(profile.get_posts(), start=1):
+                        if cancel_event.is_set():
+                            raise yt_dlp.utils.DownloadCancelled()
+                        if post.is_video and post.typename != "GraphSidecar":
+                            continue
+                        self.ui_queue.put((
+                            "instagram_progress",
+                            f"Gönderi {index} indiriliyor...",
+                        ))
+                        downloaded += self._download_instagram_post_items(
+                            post,
+                            folder,
+                            cancel_event,
+                            seen_shortcodes,
+                        )
+
+                if "reels" in categories:
+                    folder = profile_root
+                    video_index = 0
+                    for post in profile.get_posts():
+                        if cancel_event.is_set():
+                            raise yt_dlp.utils.DownloadCancelled()
+                        if not post.is_video:
+                            continue
+                        video_index += 1
+                        self.ui_queue.put((
+                            "instagram_progress",
+                            f"Reels/video {video_index} indiriliyor...",
+                        ))
+                        downloaded += self._download_instagram_post_items(
+                            post,
+                            folder,
+                            cancel_event,
+                            seen_shortcodes,
+                        )
+
+            self.ui_queue.put(("instagram_done", downloaded))
+        except yt_dlp.utils.DownloadCancelled:
+            self.ui_queue.put(("instagram_cancelled",))
+        except Exception as exc:
+            self.ui_queue.put(("instagram_download_err", instagram_friendly_error(exc)))
+
+    def _restore_instagram_inputs(self):
+        self._is_downloading = False
+        self.cancel_event = None
+        self.back_btn.configure(state="normal")
+        self.instagram_entry.configure(state="normal")
+        self.instagram_clear_btn.configure(state="normal")
+        self.browse_btn.configure(state="normal")
+        self.instagram_download_btn.configure(text="İndir")
+        self.instagram_download_btn.configure(hover_color=ACCENT_HOVER)
+        self._update_instagram_download_state()
+
+    def _finish_instagram_download_ui(self):
+        if self.current_screen != "instagram":
+            return
+        self._restore_instagram_inputs()
+        self._clear_instagram_input()
+
+    def _build_youtube_ui(self):
+        self.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
         root = ctk.CTkFrame(self, fg_color=BG)
         root.pack(fill="both", expand=True, padx=28, pady=(30, 14))
 
@@ -534,41 +1506,63 @@ class ArnoldDW(ctk.CTk):
         self._build_download_button(root)
         self._build_progress(root)
 
-        self._auto_size_window()
+        self._prepare_progress_layout()
 
-    def _auto_size_window(self):
-        # The window height is derived from the actual rendered content
-        # rather than a hardcoded guess (font metrics/DPI differ enough
-        # between machines that a fixed number either leaves a dead gap or
-        # clips the last widget). The progress bar + its info row only
-        # appear during a real download, but the window must already be
-        # tall enough for them, so they're shown briefly, measured, then
-        # hidden again before the window is actually displayed.
+    def _prepare_progress_layout(self):
+        # Measure the progress widgets once without changing the fixed 1:1.5
+        # application window, then hide them until a download starts.
         self.progress_frame.pack(fill="x", pady=(0, 6))
         self._show_progress_info_row()
         self.update_idletasks()
-        height = self.winfo_reqheight()
         self.progress_info_row.pack_forget()
         self.progress_frame.pack_forget()
-        self.geometry(f"540x{height}")
 
     def _build_url_section(self, parent):
-        row = ctk.CTkFrame(parent, fg_color="transparent")
+        row = ctk.CTkFrame(parent, fg_color="transparent", height=46)
         row.pack(fill="x", pady=(0, 4))
+        row.pack_propagate(False)
+
+        back_icon = Image.open(BACK_ICON_PATH).convert("RGBA")
+        self.back_icon_image = ctk.CTkImage(
+            light_image=back_icon,
+            dark_image=back_icon,
+            size=(22, 22),
+        )
+        self.back_btn = ctk.CTkButton(
+            row,
+            text="",
+            image=self.back_icon_image,
+            command=self._back_to_home,
+            width=46,
+            height=46,
+            corner_radius=10,
+            border_width=1,
+            border_color=BORDER,
+            fg_color=SURFACE,
+            hover_color=SURFACE_2,
+            text_color_disabled=TEXT_FAINT,
+        )
+        self.back_btn.pack(side="left", padx=(0, 8))
 
         self.url_entry = ctk.CTkEntry(
             row,
             placeholder_text="YouTube video bağlantısını yapıştırın...",
             height=46, corner_radius=10,
-            fg_color=SURFACE, border_color=BORDER, border_width=1,
+            fg_color=SURFACE, border_width=1, border_color=BORDER,
             text_color=TEXT, placeholder_text_color=TEXT_FAINT,
             font=(FONT_FAMILY, 13),
         )
-        self.url_entry.pack(fill="x", expand=True)
+        self.url_entry.pack(side="left", fill="both", expand=True)
         self.url_entry.bind("<KeyRelease>", self._on_url_changed)
         self.url_entry.bind("<<Paste>>", lambda e: self.after(10, self._on_url_changed))
-        self.url_entry.bind("<FocusIn>", lambda e: self.url_entry.configure(border_color=ACCENT))
-        self.url_entry.bind("<FocusOut>", lambda e: self.url_entry.configure(border_color=BORDER))
+        self.url_entry.bind(
+            "<FocusIn>",
+            lambda e: self.url_entry.configure(border_color=ACCENT),
+        )
+        self.url_entry.bind(
+            "<FocusOut>",
+            lambda e: self.url_entry.configure(border_color=BORDER),
+        )
 
         # Clear ("vazgeç") button - floats over the entry's own right edge
         # instead of taking its own column, so the entry spans the full row
@@ -588,11 +1582,11 @@ class ArnoldDW(ctk.CTk):
 
     def _build_preview(self, parent):
         self.preview_card = ctk.CTkFrame(
-            parent, fg_color=SURFACE, corner_radius=48,
+            parent, fg_color=SURFACE, corner_radius=10,
             border_width=1, border_color=BORDER,
-            height=PREVIEW_H + 96, width=PREVIEW_W + 16,
+            height=PREVIEW_H + 84, width=PREVIEW_W + 16,
         )
-        self.preview_card.pack(fill="x", pady=(0, 18))
+        self.preview_card.pack(fill="x", pady=(0, 14))
         self.preview_card.pack_propagate(False)
 
         # Empty state
@@ -637,7 +1631,7 @@ class ArnoldDW(ctk.CTk):
 
     def _build_options(self, parent):
         row = ctk.CTkFrame(parent, fg_color="transparent")
-        row.pack(fill="x", pady=(0, 18))
+        row.pack(fill="x", pady=(0, 14))
         # `uniform` locks both columns to the same width always, so swapping
         # MP4 <-> MP3 (which changes the label text length) can never make one
         # side shrink to make room for the other - that was the source of the
@@ -1080,6 +2074,7 @@ class ArnoldDW(ctk.CTk):
 
         self._is_downloading = True
         self.cancel_event = threading.Event()
+        self.back_btn.configure(state="disabled")
 
         self.download_btn.configure(
             state="normal", fg_color=SURFACE_2, hover_color=SURFACE_3, text="İptal Et",
@@ -1203,6 +2198,56 @@ class ArnoldDW(ctk.CTk):
                 self._set_status(err, ERROR)
                 self._update_clear_btn_visibility()
 
+        elif kind == "instagram_post_ok":
+            _, rid, loader, post, media, thumbnails = msg
+            if rid == self.request_id and self.current_screen == "instagram":
+                self._apply_instagram_post(loader, post, media, thumbnails)
+
+        elif kind == "instagram_profile_ok":
+            _, rid, loader, profile, avatar = msg
+            if rid == self.request_id and self.current_screen == "instagram":
+                self._apply_instagram_profile(loader, profile, avatar)
+
+        elif kind == "instagram_err":
+            _, rid, err = msg
+            if rid == self.request_id and self.current_screen == "instagram":
+                self.instagram_mode = None
+                self._show_instagram_empty()
+                self._set_instagram_status(err, ERROR)
+                self.instagram_download_btn.configure(
+                    state="disabled",
+                    fg_color=SURFACE_3,
+                )
+
+        elif kind == "instagram_progress":
+            _, text = msg
+            if self.current_screen == "instagram":
+                self._set_instagram_status(text, TEXT_MUTED)
+
+        elif kind == "instagram_done":
+            _, _downloaded = msg
+            if self.current_screen == "instagram":
+                self._is_downloading = False
+                self.cancel_event = None
+                self._set_instagram_status("")
+                self.instagram_download_btn.configure(
+                    state="disabled",
+                    text="Tamamlandı",
+                    fg_color=SUCCESS,
+                )
+                self.after(1800, self._finish_instagram_download_ui)
+
+        elif kind == "instagram_cancelled":
+            if self.current_screen == "instagram":
+                self._set_instagram_status("İndirme iptal edildi", TEXT_MUTED)
+                self._restore_instagram_inputs()
+
+        elif kind == "instagram_download_err":
+            _, err = msg
+            if self.current_screen == "instagram":
+                self._set_instagram_status(err, ERROR)
+                self._restore_instagram_inputs()
+
         elif kind == "progress":
             _, frac, speed, eta = msg
             self.progress_bar.set(min(max(frac, 0), 1))
@@ -1257,6 +2302,8 @@ class ArnoldDW(ctk.CTk):
         self.quality_menu.configure(state="normal" if has_preview else "disabled")
         self.clear_btn.configure(state="normal")
         self.browse_btn.configure(state="normal")
+        if self.current_screen == "youtube" and self.back_btn.winfo_exists():
+            self.back_btn.configure(state="normal")
         self._update_clear_btn_visibility()
 
 
