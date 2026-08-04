@@ -112,23 +112,58 @@ AUDIO_OPTIONS = ["320 kbps", "192 kbps", "128 kbps"]
 AUDIO_BITRATE = {"320 kbps": "320", "192 kbps": "192", "128 kbps": "128"}
 
 PREVIEW_W, PREVIEW_H = 360, 203
+# Matches the preview card's own corner_radius, so the cover sits inside the
+# card as a concentric rounded rectangle instead of an oval-looking inset.
+THUMB_RADIUS = 10
+# Instagram previews share the YouTube cover width so both screens fill their
+# card the same way; the box is taller because Instagram media is rarely 16:9.
+IG_PREVIEW_W, IG_PREVIEW_H = 360, 285
 SPINNER_DIAMETER = 48
 SPINNER_WIDTH = 5
 
 
-def _max_available_height(info):
-    """Highest video height actually offered by YouTube for this video."""
+def _format_short_side(fmt):
+    """A format's quality rung is its short side, not its height.
+
+    A horizontal 1080p stream is 1920x1080, but a vertical one (Shorts) is
+    1080x1920 - both are "1080p". Measuring the short side is what makes the
+    two orientations comparable; using height would call a 1080p Short
+    "1920p" and offer it rungs (4K, 1440p) that don't exist.
+    """
+    width = fmt.get("width") or 0
+    height = fmt.get("height") or 0
+    if not height:
+        return 0
+    return min(width, height) if width else height
+
+
+def _is_vertical(info):
+    """True for portrait sources (Shorts), where width carries the quality."""
+    if not info:
+        return False
+    best = None
+    for fmt in (info.get("formats") or []):
+        width, height = fmt.get("width") or 0, fmt.get("height") or 0
+        if width and height and (best is None or width * height > best[0] * best[1]):
+            best = (width, height)
+    if best is None:
+        best = (info.get("width") or 0, info.get("height") or 0)
+    return bool(best[0] and best[1] and best[1] > best[0])
+
+
+def _max_available_quality(info):
+    """Highest quality rung actually offered by YouTube for this video."""
     if not info:
         return 0
-    heights = [f.get("height") or 0 for f in (info.get("formats") or [])]
-    return max(heights) if heights else 0
+    sides = [s for s in (_format_short_side(f) for f in (info.get("formats") or [])) if s]
+    return max(sides) if sides else 0
 
 
-def _available_quality_options(max_height):
+def _available_quality_options(max_quality):
     """Only ever offer quality rungs the source video actually supports."""
-    if not max_height:
+    if not max_quality:
         return QUALITY_OPTIONS[:]
-    opts = [label for label in QUALITY_OPTIONS if QUALITY_HEIGHTS[label] <= max_height]
+    opts = [label for label in QUALITY_OPTIONS if QUALITY_HEIGHTS[label] <= max_quality]
     return opts or [QUALITY_OPTIONS[-1]]
 
 
@@ -186,7 +221,7 @@ def _spinner_sprite(angle, diameter=SPINNER_DIAMETER, width=SPINNER_WIDTH):
     return sprite
 
 
-def _dim_image(img, alpha=150, radius=12):
+def _dim_image(img, alpha=150, radius=THUMB_RADIUS):
     """Darken a rounded-rect image while keeping its transparent corners transparent."""
     base = img.convert("RGBA")
     overlay = Image.new("RGBA", base.size, (0, 0, 0, 0))
@@ -430,9 +465,19 @@ class ThemedDropdown(ctk.CTkFrame):
         w = self.winfo_width()
         h = popup.winfo_reqheight()
 
+        # The quality menu sits low in the pinned bottom block, so a list
+        # opened downwards would hang off the app window onto the desktop and
+        # look detached. Flip it above the trigger whenever it fits there,
+        # and only fall back to the screen edge if it does not.
         screen_h = self.winfo_screenheight()
-        if y + h > screen_h - 8:
-            y = self.winfo_rooty() - h - 4
+        window = self.winfo_toplevel()
+        window_top = window.winfo_rooty()
+        window_bottom = window_top + window.winfo_height()
+        flipped_y = self.winfo_rooty() - h - 4
+        if y + h > min(window_bottom, screen_h) - 8 and flipped_y >= window_top + 8:
+            y = flipped_y
+        elif y + h > screen_h - 8:
+            y = max(8, flipped_y)
 
         popup.geometry(f"{w}x{h}+{x}+{y}")
         try:
@@ -534,6 +579,12 @@ class ArnoldDW(ctk.CTk):
 
         self._preview_spin_job = None
         self._preview_spin_angle = 0
+
+        self._instagram_spin_job = None
+        self._instagram_spin_angle = 0
+        self.instagram_loading_icon = None
+        self._progress_indeterminate = False
+        self._progress_pack_kwargs = {"fill": "x", "pady": (0, 6)}
 
         self._processing_active = False
         self._processing_job = None
@@ -706,9 +757,41 @@ class ArnoldDW(ctk.CTk):
 
         self.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
         root = ctk.CTkFrame(self, fg_color=BG)
-        root.pack(fill="both", expand=True, padx=28, pady=(30, 14))
+        # Same breathing room under the download button as there is above the
+        # input row, so the pinned bottom block does not hug the window edge.
+        root.pack(fill="both", expand=True, padx=28, pady=(30, 30))
 
         self._build_instagram_input(root)
+
+        # Save location + download button are pinned to the bottom of the
+        # window (packed bottom-first) instead of following the preview, so
+        # they stay put instead of riding up and down with the preview.
+        bottom = ctk.CTkFrame(root, fg_color="transparent")
+        bottom.pack(side="bottom", fill="x")
+
+        self._build_save_location(bottom)
+
+        self.instagram_download_btn = ctk.CTkButton(
+            bottom,
+            text="İndir",
+            command=self._on_instagram_download,
+            height=50,
+            corner_radius=12,
+            state="disabled",
+            fg_color=SURFACE_3,
+            hover_color=ACCENT_HOVER,
+            text_color=TEXT,
+            text_color_disabled=TEXT_FAINT,
+            font=(FONT_FAMILY, 15, "bold"),
+        )
+        self.instagram_download_btn.pack(fill="x")
+
+        # Same progress bar + message area the YouTube screen uses, so an
+        # Instagram download reports itself the same way instead of turning
+        # the button into a green "Tamamlandı". Packed bottom *after* the
+        # block above, which lands it between the preview and that block.
+        self._build_progress(root)
+        self._progress_pack_kwargs = {"side": "bottom", "fill": "x", "pady": (0, 14)}
 
         self.instagram_preview_card = ctk.CTkFrame(
             root,
@@ -725,25 +808,12 @@ class ArnoldDW(ctk.CTk):
             self.instagram_preview_card,
             fg_color="transparent",
         )
-        self.instagram_preview_content.pack(fill="both", expand=True, padx=14, pady=14)
+        # padx here is what gives the caption / profile text its distance from
+        # the card edge, the same 22px the YouTube preview uses.
+        self.instagram_preview_content.pack(fill="both", expand=True, padx=22, pady=14)
         self._show_instagram_empty()
 
-        self._build_save_location(root)
-
-        self.instagram_download_btn = ctk.CTkButton(
-            root,
-            text="İndir",
-            command=self._on_instagram_download,
-            height=50,
-            corner_radius=12,
-            state="disabled",
-            fg_color=SURFACE_3,
-            hover_color=ACCENT_HOVER,
-            text_color=TEXT,
-            text_color_disabled=TEXT_FAINT,
-            font=(FONT_FAMILY, 15, "bold"),
-        )
-        self.instagram_download_btn.pack(fill="x")
+        self._prepare_progress_layout()
 
     def _build_instagram_input(self, parent):
         row = ctk.CTkFrame(parent, fg_color="transparent", height=46)
@@ -802,15 +872,16 @@ class ArnoldDW(ctk.CTk):
         self.instagram_clear_btn = ctk.CTkButton(
             row,
             text="✕",
-            width=34,
-            height=34,
-            corner_radius=8,
-            fg_color=SURFACE_2,
-            hover_color=SURFACE_3,
-            border_width=0,
+            width=46,
+            height=46,
+            corner_radius=10,
+            border_width=1,
+            border_color=BORDER,
+            fg_color=SURFACE,
+            hover_color=SURFACE_2,
             text_color=TEXT_MUTED,
             text_color_disabled=TEXT_FAINT,
-            font=(FONT_FAMILY, 13),
+            font=(FONT_FAMILY, 15),
             command=self._clear_instagram_input,
         )
 
@@ -825,6 +896,7 @@ class ArnoldDW(ctk.CTk):
         self.instagram_status_label.pack(fill="x", pady=(0, 4))
 
     def _replace_instagram_preview(self):
+        self._stop_instagram_spinner()
         for child in self.instagram_preview_content.winfo_children():
             child.destroy()
         self.instagram_preview_images = []
@@ -841,7 +913,7 @@ class ArnoldDW(ctk.CTk):
         ).pack()
         ctk.CTkLabel(
             empty,
-            text="Instagram önizlemesi burada görünecek",
+            text="Bağlantı önizlemesi burada görünecek",
             text_color=TEXT_FAINT,
             font=(FONT_FAMILY, 13),
         ).pack(pady=(8, 0))
@@ -850,12 +922,40 @@ class ArnoldDW(ctk.CTk):
         self._replace_instagram_preview()
         loading = ctk.CTkFrame(self.instagram_preview_content, fg_color="transparent")
         loading.place(relx=0.5, rely=0.5, anchor="center")
+        self.instagram_loading_icon = ctk.CTkLabel(loading, text="")
+        self.instagram_loading_icon.pack()
         ctk.CTkLabel(
             loading,
-            text="Yükleniyor...",
-            text_color=TEXT_MUTED,
-            font=(FONT_FAMILY, 13, "bold"),
-        ).pack()
+            text="Yükleniyor…",
+            text_color=TEXT_FAINT,
+            font=(FONT_FAMILY, 13),
+        ).pack(pady=(8, 0))
+        self._start_instagram_spinner()
+
+    # ------------------------------------------------------------------
+    # Instagram preview-loading spinner (same ring as the YouTube screen)
+    # ------------------------------------------------------------------
+
+    def _start_instagram_spinner(self):
+        self._instagram_spin_angle = 0
+        self._tick_instagram_spinner()
+
+    def _tick_instagram_spinner(self):
+        icon = self.instagram_loading_icon
+        if icon is None or not icon.winfo_exists():
+            self._instagram_spin_job = None
+            return
+        sprite = _spinner_sprite(self._instagram_spin_angle)
+        self._instagram_spinner_img = ctk.CTkImage(sprite, size=sprite.size)
+        icon.configure(image=self._instagram_spinner_img, text="")
+        self._instagram_spin_angle = (self._instagram_spin_angle + 18) % 360
+        self._instagram_spin_job = self.after(70, self._tick_instagram_spinner)
+
+    def _stop_instagram_spinner(self):
+        if self._instagram_spin_job is not None:
+            self.after_cancel(self._instagram_spin_job)
+            self._instagram_spin_job = None
+        self.instagram_loading_icon = None
 
     def _set_instagram_status(self, text, color=TEXT_MUTED):
         self.instagram_status_label.configure(text=text, text_color=color)
@@ -863,15 +963,11 @@ class ArnoldDW(ctk.CTk):
     def _update_instagram_clear_button(self):
         has_content = bool(self.instagram_entry.get().strip())
         if has_content and not self.instagram_clear_btn.winfo_ismapped():
-            self.instagram_clear_btn.place(
-                in_=self.instagram_entry,
-                relx=1.0,
-                rely=0.5,
-                anchor="e",
-                x=-6,
+            self.instagram_clear_btn.pack(
+                side="right", padx=(8, 0), before=self.instagram_entry,
             )
         elif not has_content and self.instagram_clear_btn.winfo_ismapped():
-            self.instagram_clear_btn.place_forget()
+            self.instagram_clear_btn.pack_forget()
 
     def _clear_instagram_input(self):
         if self.debounce_job is not None:
@@ -1086,19 +1182,21 @@ class ArnoldDW(ctk.CTk):
         self._replace_instagram_preview()
 
         media_type = "Carousel" if len(media) > 1 else ("Video" if media[0]["is_video"] else "Fotoğraf")
-        ctk.CTkLabel(
+        # Caption goes under the media, the same way the YouTube screen puts
+        # its title under the cover - so it is packed after the media below.
+        caption = ctk.CTkLabel(
             self.instagram_preview_content,
             text=f"@{post.owner_username}  •  {media_type}",
             text_color=TEXT,
             font=(FONT_FAMILY, 14, "bold"),
             anchor="w",
-        ).pack(fill="x", pady=(0, 10))
+        )
 
         if len(media) == 1:
             image = thumbnails[0]
             if image is not None:
-                preview = make_rounded(image, (300, 230), radius=10)
-                preview_image = ctk.CTkImage(preview, size=(300, 230))
+                preview = make_rounded(image, (IG_PREVIEW_W, IG_PREVIEW_H), radius=THUMB_RADIUS)
+                preview_image = ctk.CTkImage(preview, size=(IG_PREVIEW_W, IG_PREVIEW_H))
                 self.instagram_preview_images.append(preview_image)
                 ctk.CTkLabel(
                     self.instagram_preview_content,
@@ -1111,7 +1209,9 @@ class ArnoldDW(ctk.CTk):
                     text="Önizleme yüklenemedi",
                     text_color=TEXT_FAINT,
                     font=(FONT_FAMILY, 13),
-                ).pack(expand=True)
+                    height=IG_PREVIEW_H,
+                ).pack()
+            caption.pack(fill="x", pady=(10, 0))
             self.instagram_media_vars = [ctk.BooleanVar(value=True)]
         else:
             toolbar = ctk.CTkFrame(self.instagram_preview_content, fg_color="transparent")
@@ -1185,6 +1285,8 @@ class ArnoldDW(ctk.CTk):
                     text_color=TEXT_MUTED,
                     font=(FONT_FAMILY, 11),
                 ).pack(padx=8, pady=(2, 8))
+
+            caption.pack(fill="x", pady=(10, 0))
 
         self._set_instagram_status("")
         self._update_instagram_download_state()
@@ -1329,7 +1431,12 @@ class ArnoldDW(ctk.CTk):
             hover_color=SURFACE_3,
             text="İptal Et",
         )
-        self._set_instagram_status("İndirme başlatılıyor...", TEXT_MUTED)
+        self._set_instagram_status("")
+
+        self._set_progress_determinate()
+        self.progress_bar.set(0)
+        self._show_progress_frame()
+        self._show_progress_message("İndirme başlatılıyor...")
 
         threading.Thread(
             target=self._instagram_download_worker,
@@ -1396,10 +1503,12 @@ class ArnoldDW(ctk.CTk):
             if payload[0] == "post":
                 post = self.instagram_post
                 folder = root
+                total = len(payload[1])
                 for position, item in enumerate(payload[1], start=1):
                     self.ui_queue.put((
                         "instagram_progress",
-                        f"{position}/{len(payload[1])} indiriliyor...",
+                        f"{position}/{total} indiriliyor...",
+                        (position - 1) / total,
                     ))
                     basename = (
                         f"instagram_{post.owner_username}_"
@@ -1419,7 +1528,11 @@ class ArnoldDW(ctk.CTk):
                 seen_shortcodes = set()
 
                 if "profile_pic" in categories:
-                    self.ui_queue.put(("instagram_progress", "Profil fotoğrafı indiriliyor..."))
+                    self.ui_queue.put((
+                        "instagram_progress",
+                        "Profil fotoğrafı indiriliyor...",
+                        None,
+                    ))
                     profile_item = {
                         "is_video": False,
                         "url": str(profile.profile_pic_url),
@@ -1443,6 +1556,7 @@ class ArnoldDW(ctk.CTk):
                         self.ui_queue.put((
                             "instagram_progress",
                             f"Gönderi {index} indiriliyor...",
+                            None,
                         ))
                         downloaded += self._download_instagram_post_items(
                             post,
@@ -1463,6 +1577,7 @@ class ArnoldDW(ctk.CTk):
                         self.ui_queue.put((
                             "instagram_progress",
                             f"Reels/video {video_index} indiriliyor...",
+                            None,
                         ))
                         downloaded += self._download_instagram_post_items(
                             post,
@@ -1492,30 +1607,52 @@ class ArnoldDW(ctk.CTk):
         if self.current_screen != "instagram":
             return
         self._restore_instagram_inputs()
+        self.progress_frame.pack_forget()
+        self.progress_bar.set(0)
         self._clear_instagram_input()
 
     def _build_youtube_ui(self):
         self.geometry(f"{APP_WIDTH}x{APP_HEIGHT}")
         root = ctk.CTkFrame(self, fg_color=BG)
-        root.pack(fill="both", expand=True, padx=28, pady=(30, 14))
+        # Same breathing room under the download button as there is above the
+        # input row, like the Instagram screen.
+        root.pack(fill="both", expand=True, padx=28, pady=(30, 30))
 
         self._build_url_section(root)
-        self._build_preview(root)
-        self._build_options(root)
-        self._build_save_location(root)
-        self._build_download_button(root)
+
+        # Everything the user sets before downloading - format, quality, save
+        # location - plus the button itself is pinned to the bottom of the
+        # window, so the block stays put instead of riding on the preview.
+        bottom = ctk.CTkFrame(root, fg_color="transparent")
+        bottom.pack(side="bottom", fill="x")
+
+        self._build_options(bottom)
+        self._build_save_location(bottom)
+        self._build_download_button(bottom)
+
+        # Packed bottom *after* that block, which lands the bar between the
+        # preview and the block.
         self._build_progress(root)
+        self._progress_pack_kwargs = {"side": "bottom", "fill": "x", "pady": (0, 14)}
+
+        self._build_preview(root)
 
         self._prepare_progress_layout()
 
     def _prepare_progress_layout(self):
         # Measure the progress widgets once without changing the fixed 1:1.5
         # application window, then hide them until a download starts.
-        self.progress_frame.pack(fill="x", pady=(0, 6))
+        self._show_progress_frame()
         self._show_progress_info_row()
         self.update_idletasks()
         self.progress_info_row.pack_forget()
         self.progress_frame.pack_forget()
+
+    def _show_progress_frame(self):
+        # Each screen decides where the bar belongs: the YouTube screen keeps
+        # it in normal flow under the download button, the Instagram screen
+        # anchors it above the pinned save-location block.
+        self.progress_frame.pack(**self._progress_pack_kwargs)
 
     def _build_url_section(self, parent):
         row = ctk.CTkFrame(parent, fg_color="transparent", height=46)
@@ -1564,14 +1701,17 @@ class ArnoldDW(ctk.CTk):
             lambda e: self.url_entry.configure(border_color=BORDER),
         )
 
-        # Clear ("vazgeç") button - floats over the entry's own right edge
-        # instead of taking its own column, so the entry spans the full row
-        # width and its right edge lines up with the preview card below it.
+        # Clear ("vazgeç") button - its own boxed button matching the back
+        # button, sitting outside the entry rather than floating over it. It is
+        # only packed while the entry has content, and then goes in *before*
+        # the entry in pack order so the entry gives up exactly its width;
+        # with an empty entry the row looks like it did before, full width.
         self.clear_btn = ctk.CTkButton(
-            row, text="✕", width=34, height=34, corner_radius=8,
-            fg_color=SURFACE_2, hover_color=SURFACE_3, border_width=0,
+            row, text="✕", width=46, height=46, corner_radius=10,
+            border_width=1, border_color=BORDER,
+            fg_color=SURFACE, hover_color=SURFACE_2,
             text_color=TEXT_MUTED, text_color_disabled=TEXT_FAINT,
-            font=(FONT_FAMILY, 13), command=self._on_clear_clicked,
+            font=(FONT_FAMILY, 15), command=self._on_clear_clicked,
         )
 
         self.status_label = ctk.CTkLabel(
@@ -1597,7 +1737,7 @@ class ArnoldDW(ctk.CTk):
             text_color=TEXT_FAINT,
         ).pack()
         ctk.CTkLabel(
-            self.empty_state, text="Video önizlemesi burada görünecek",
+            self.empty_state, text="Bağlantı önizlemesi burada görünecek",
             text_color=TEXT_FAINT, font=(FONT_FAMILY, 13),
         ).pack(pady=(6, 0))
 
@@ -1610,24 +1750,26 @@ class ArnoldDW(ctk.CTk):
             text_color=TEXT_FAINT, font=(FONT_FAMILY, 13),
         ).pack(pady=(8, 0))
 
-        # Filled state (built but not placed until needed)
-        self.filled_state = ctk.CTkFrame(self.preview_card, fg_color="transparent")
-
-        self.thumb_label = ctk.CTkLabel(self.filled_state, text="")
-        self.thumb_label.pack(pady=(8, 10))
+        # Filled state (built but not packed until needed).
+        #
+        # These sit directly in the card rather than in a wrapper frame: a
+        # child frame stretched to fill the card paints its own opaque
+        # rectangle across the whole area, which covered the card's rounded
+        # corners and border and made the preview look boxy the moment a link
+        # was pasted. Padded labels never reach the corners, so the card's
+        # own frame stays visible.
+        self.thumb_label = ctk.CTkLabel(self.preview_card, text="")
 
         self.title_label = ctk.CTkLabel(
-            self.filled_state, text="", text_color=TEXT,
+            self.preview_card, text="", text_color=TEXT,
             font=(FONT_FAMILY, 14, "bold"), wraplength=PREVIEW_W,
             justify="left", anchor="w",
         )
-        self.title_label.pack(fill="x", padx=16)
 
         self.meta_label = ctk.CTkLabel(
-            self.filled_state, text="", text_color=TEXT_MUTED,
+            self.preview_card, text="", text_color=TEXT_MUTED,
             font=(FONT_FAMILY, 12), anchor="w", justify="left",
         )
-        self.meta_label.pack(fill="x", padx=16, pady=(3, 8))
 
     def _build_options(self, parent):
         row = ctk.CTkFrame(parent, fg_color="transparent")
@@ -1714,7 +1856,7 @@ class ArnoldDW(ctk.CTk):
             text_color=TEXT, text_color_disabled=TEXT_FAINT,
             font=(FONT_FAMILY, 15, "bold"),
         )
-        self.download_btn.pack(fill="x", pady=(0, 14))
+        self.download_btn.pack(fill="x")
 
     def _build_progress(self, parent):
         self.progress_frame = ctk.CTkFrame(parent, fg_color="transparent")
@@ -1752,9 +1894,12 @@ class ArnoldDW(ctk.CTk):
         )
         self.progress_eta_label.grid(row=0, column=2, sticky="ew")
 
+        # Single-line phase messages ("İndiriliyor...", "Tamamlandı") are
+        # centred under the bar; the three-column row above keeps its
+        # left/center/right split.
         self.progress_label = ctk.CTkLabel(
             self.progress_frame, text="", text_color=TEXT_MUTED,
-            font=(FONT_FAMILY, 12), anchor="w",
+            font=(FONT_FAMILY, 12), anchor="center",
         )
 
     # ------------------------------------------------------------------
@@ -1792,30 +1937,66 @@ class ArnoldDW(ctk.CTk):
         if not self.progress_label.winfo_ismapped():
             self.progress_label.pack(fill="x", pady=(6, 0))
 
+    def _set_progress_determinate(self):
+        """Leave the sliding (indeterminate) bar, if that is what is running."""
+        if self._progress_indeterminate:
+            self.progress_bar.stop()
+            self.progress_bar.configure(mode="determinate")
+            self._progress_indeterminate = False
+
+    def _set_instagram_progress(self, text, frac=None):
+        """Instagram progress line + bar.
+
+        A post download knows how many items it has, so it drives the bar
+        directly. A profile download discovers its posts while it walks them,
+        so there is no total to divide by - the bar slides instead.
+        """
+        self._show_progress_message(text)
+        if frac is None:
+            if not self._progress_indeterminate:
+                self.progress_bar.configure(mode="indeterminate")
+                self.progress_bar.start()
+                self._progress_indeterminate = True
+        else:
+            self._set_progress_determinate()
+            self.progress_bar.set(min(max(frac, 0), 1))
+
+    def _pack_filled_preview(self):
+        # 22px inset keeps the title/meta text off the card's rounded corners,
+        # matching the Instagram preview's own inset.
+        self.thumb_label.pack(pady=(8, 10))
+        self.title_label.pack(fill="x", padx=22)
+        self.meta_label.pack(fill="x", padx=22, pady=(3, 8))
+
+    def _hide_filled_preview(self):
+        self.thumb_label.pack_forget()
+        self.title_label.pack_forget()
+        self.meta_label.pack_forget()
+
     def _show_filled_preview(self):
         self._stop_preview_spinner()
         self.empty_state.place_forget()
         self.loading_state.place_forget()
-        self.filled_state.pack(fill="both", expand=True)
+        self._pack_filled_preview()
 
     def _show_empty_preview(self):
         self._stop_preview_spinner()
-        self.filled_state.pack_forget()
+        self._hide_filled_preview()
         self.loading_state.place_forget()
         self.empty_state.place(relx=0.5, rely=0.5, anchor="center")
 
     def _show_loading_preview(self):
         self.empty_state.place_forget()
-        self.filled_state.pack_forget()
+        self._hide_filled_preview()
         self.loading_state.place(relx=0.5, rely=0.5, anchor="center")
 
     def _update_clear_btn_visibility(self):
         has_content = bool(self.url_entry.get().strip()) or self.current_info is not None
         mapped = bool(self.clear_btn.winfo_ismapped())
         if has_content and not mapped:
-            self.clear_btn.place(in_=self.url_entry, relx=1.0, rely=0.5, anchor="e", x=-6)
+            self.clear_btn.pack(side="right", padx=(8, 0), before=self.url_entry)
         elif not has_content and mapped:
-            self.clear_btn.place_forget()
+            self.clear_btn.pack_forget()
 
     # ------------------------------------------------------------------
     # Download location
@@ -1930,7 +2111,7 @@ class ArnoldDW(ctk.CTk):
         self.meta_label.configure(text=meta_text)
 
         if thumb_img is not None:
-            rounded = make_rounded(thumb_img, (PREVIEW_W, PREVIEW_H), radius=32)
+            rounded = make_rounded(thumb_img, (PREVIEW_W, PREVIEW_H), radius=THUMB_RADIUS)
             self._thumb_pil_image = rounded
             self.thumb_ctk_image = ctk.CTkImage(rounded, size=(PREVIEW_W, PREVIEW_H))
             self.thumb_label.configure(image=self.thumb_ctk_image, text="")
@@ -1951,9 +2132,9 @@ class ArnoldDW(ctk.CTk):
         self._set_cta_enabled(self.download_btn, True)
 
         if self.format_var.get() == "MP4":
-            max_h = _max_available_height(info)
-            self.quality_menu.configure(values=_available_quality_options(max_h))
-            self.quality_var.set(self._pick_default_quality(max_h))
+            max_q = _max_available_quality(info)
+            self.quality_menu.configure(values=_available_quality_options(max_q))
+            self.quality_var.set(self._pick_default_quality(max_q))
 
     def _pick_default_quality(self, max_height):
         target = min(1080, max_height) if max_height else 1080
@@ -2010,9 +2191,9 @@ class ArnoldDW(ctk.CTk):
             self.quality_var.set(AUDIO_OPTIONS[1])
         else:
             self.quality_title.configure(text="VİDEO KALİTESİ")
-            max_h = _max_available_height(self.current_info) if self.current_info else 0
-            self.quality_menu.configure(values=_available_quality_options(max_h))
-            self.quality_var.set(self._pick_default_quality(max_h))
+            max_q = _max_available_quality(self.current_info) if self.current_info else 0
+            self.quality_menu.configure(values=_available_quality_options(max_q))
+            self.quality_var.set(self._pick_default_quality(max_q))
 
     # ------------------------------------------------------------------
     # Processing (post-download) animation
@@ -2086,7 +2267,7 @@ class ArnoldDW(ctk.CTk):
         self.browse_btn.configure(state="disabled")
 
         self.progress_bar.set(0)
-        self.progress_frame.pack(fill="x", pady=(0, 6))
+        self._show_progress_frame()
         self._show_progress_message("İndirme başlatılıyor...")
 
         url = self.current_url
@@ -2094,10 +2275,11 @@ class ArnoldDW(ctk.CTk):
         quality = self.quality_var.get()
         download_dir = self.download_dir
         cancel_event = self.cancel_event
+        vertical = _is_vertical(self.current_info)
 
         threading.Thread(
             target=self._download_worker,
-            args=(url, fmt, quality, download_dir, cancel_event),
+            args=(url, fmt, quality, download_dir, cancel_event, vertical),
             daemon=True,
         ).start()
 
@@ -2106,7 +2288,7 @@ class ArnoldDW(ctk.CTk):
             self.cancel_event.set()
         self.download_btn.configure(state="disabled", fg_color=SURFACE_3, text="İptal ediliyor...")
 
-    def _download_worker(self, url, fmt, quality, download_dir, cancel_event):
+    def _download_worker(self, url, fmt, quality, download_dir, cancel_event, vertical=False):
         try:
             os.makedirs(download_dir, exist_ok=True)
             outtmpl = os.path.join(download_dir, "%(title).150B [%(id)s].%(ext)s")
@@ -2146,7 +2328,12 @@ class ArnoldDW(ctk.CTk):
                     "preferredquality": AUDIO_BITRATE.get(quality, "192"),
                 }]
             else:
-                height = QUALITY_HEIGHTS.get(quality, 1080)
+                limit = QUALITY_HEIGHTS.get(quality, 1080)
+                # The rung the user picked always describes the short side, so
+                # a portrait source has to be filtered on width - a 144p Short
+                # is 144x256, and "height<=144" matches none of its formats,
+                # which is what made the low rungs fail on Shorts.
+                dim = "width" if vertical else "height"
                 # Prefer m4a/AAC audio explicitly: YouTube's plain "bestaudio"
                 # is usually Opus, which many common Windows video players
                 # can't decode when it's boxed in an MP4 container, so the
@@ -2154,9 +2341,9 @@ class ArnoldDW(ctk.CTk):
                 # universally supported, so ask for that first and only fall
                 # back to whatever audio is available if no m4a track exists.
                 ydl_opts["format"] = (
-                    f"bestvideo[height<={height}]+bestaudio[ext=m4a]"
-                    f"/bestvideo[height<={height}]+bestaudio"
-                    f"/best[height<={height}]"
+                    f"bestvideo[{dim}<={limit}]+bestaudio[ext=m4a]"
+                    f"/bestvideo[{dim}<={limit}]+bestaudio"
+                    f"/best[{dim}<={limit}]"
                 )
                 ydl_opts["merge_output_format"] = "mp4"
 
@@ -2220,32 +2407,33 @@ class ArnoldDW(ctk.CTk):
                 )
 
         elif kind == "instagram_progress":
-            _, text = msg
+            _, text, frac = msg
             if self.current_screen == "instagram":
-                self._set_instagram_status(text, TEXT_MUTED)
+                self._set_instagram_progress(text, frac)
 
         elif kind == "instagram_done":
             _, _downloaded = msg
             if self.current_screen == "instagram":
                 self._is_downloading = False
                 self.cancel_event = None
-                self._set_instagram_status("")
-                self.instagram_download_btn.configure(
-                    state="disabled",
-                    text="Tamamlandı",
-                    fg_color=SUCCESS,
-                )
+                self._set_progress_determinate()
+                self.progress_bar.set(1)
+                self._show_progress_message("Tamamlandı", SUCCESS)
                 self.after(1800, self._finish_instagram_download_ui)
 
         elif kind == "instagram_cancelled":
             if self.current_screen == "instagram":
-                self._set_instagram_status("İndirme iptal edildi", TEXT_MUTED)
+                self._set_progress_determinate()
+                self.progress_bar.set(0)
+                self._show_progress_message("İndirme iptal edildi")
                 self._restore_instagram_inputs()
 
         elif kind == "instagram_download_err":
             _, err = msg
             if self.current_screen == "instagram":
-                self._set_instagram_status(err, ERROR)
+                self._set_progress_determinate()
+                self.progress_bar.set(0)
+                self._show_progress_message(err, ERROR)
                 self._restore_instagram_inputs()
 
         elif kind == "progress":
