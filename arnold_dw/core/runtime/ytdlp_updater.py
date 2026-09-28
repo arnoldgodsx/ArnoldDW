@@ -456,18 +456,22 @@ class EngineManager:
             raise UpdateError("PyPI lists no usable releases")
         return max(usable, key=parse_version)
 
-    def check_for_update(self, channel: Channel = "stable") -> UpdateInfo | None:
+    def check_for_update(self, channel: Channel = "stable", *, raise_errors: bool = False) -> UpdateInfo | None:
         """Newest yt-dlp on PyPI if it beats everything already available, else ``None``.
 
         ``channel="nightly"`` also considers yt-dlp's nightly builds (published to PyPI as
         ``.devN`` releases), which usually carry YouTube fixes days before a stable release.
-        Network and parsing errors are logged and reported as "no update".
+        Network and parsing errors are logged and reported as "no update", or raised as
+        :class:`UpdateError` when ``raise_errors`` is set (so a UI can tell "up to date"
+        from "could not check").
         """
         try:
             info = self._build_update_info(channel)
         except Exception as exc:
             log.warning("yt-dlp update check failed: %s", exc)
-            return None
+            if not raise_errors:
+                return None
+            raise _check_error(exc) from exc
         with contextlib.suppress(OSError):
             self._update_state(last_check=time.time())
         return info
@@ -699,6 +703,47 @@ def _as_update_error(exc: Exception) -> UpdateError:
     return UpdateError(f"{type(exc).__name__}: {exc}")
 
 
+def _check_error(exc: Exception) -> UpdateError:
+    return UpdateError(f"{type(exc).__name__}: {exc}",
+                       "Güncellemeler denetlenemedi. İnternet bağlantınızı kontrol edin.")
+
+
+def engine_failure_reason(exc: BaseException | None) -> str | None:
+    """Describe ``exc`` if it shows the yt-dlp engine itself is broken, else ``None``.
+
+    A half-working engine (a new yt-dlp whose submodule is missing or renamed) surfaces as
+    ImportError/AttributeError raised from inside the ``yt_dlp`` package, possibly wrapped by
+    yt-dlp's own DownloadError (``exc_info``) or chained. Errors raised elsewhere - our own
+    hooks, network problems, unavailable videos - never count.
+    """
+    seen: set[int] = set()
+    stack = [exc]
+    while stack:
+        current = stack.pop()
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, (ImportError, AttributeError)) and _raised_in_engine(current):
+            return f"{type(current).__name__}: {current}"[:500]
+        exc_info = getattr(current, "exc_info", None)
+        if isinstance(exc_info, tuple) and len(exc_info) == 3:
+            stack.append(exc_info[1])
+        stack.extend([current.__cause__, current.__context__])
+    return None
+
+
+def _raised_in_engine(exc: BaseException) -> bool:
+    tb = exc.__traceback__
+    last = None
+    while tb is not None:
+        last = tb.tb_frame.f_code.co_filename
+        tb = tb.tb_next
+    if last is None:
+        return False
+    parts = os.path.normcase(os.path.normpath(last)).split(os.sep)
+    return any(p in PACKAGES for p in parts[:-1])
+
+
 def _extract_wheel(wheel_path: str, dest: str) -> None:
     """Unpack the import packages of a wheel (plus its dist-info) into ``dest``."""
     dest_abs = os.path.abspath(dest)
@@ -752,8 +797,8 @@ def activate(verify: bool = True) -> str:
         return default_manager().current_version() or "unknown"
 
 
-def check_for_update(channel: Channel = "stable") -> UpdateInfo | None:
-    return default_manager().check_for_update(channel)
+def check_for_update(channel: Channel = "stable", *, raise_errors: bool = False) -> UpdateInfo | None:
+    return default_manager().check_for_update(channel, raise_errors=raise_errors)
 
 
 def download_and_install(
@@ -766,3 +811,32 @@ def download_and_install(
 
 def current_version() -> str | None:
     return default_manager().current_version()
+
+
+def engine_source() -> str:
+    return default_manager().engine_source()
+
+
+def installed_version() -> str | None:
+    return default_manager().installed_version()
+
+
+def restart_required() -> bool:
+    return default_manager().restart_required()
+
+
+def mark_active_broken(reason: str) -> bool:
+    return default_manager().mark_active_broken(reason)
+
+
+def report_failure(exc: BaseException) -> bool:
+    """Mark the running engine broken if ``exc`` came from inside it. Never raises.
+
+    Returns True when the engine was marked (the next start rolls back to the previous one).
+    """
+    try:
+        reason = engine_failure_reason(exc)
+        return bool(reason) and default_manager().mark_active_broken(reason)
+    except Exception:
+        log.exception("could not record the engine failure")
+        return False
