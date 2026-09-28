@@ -344,8 +344,9 @@ def test_network_audio_download_with_tags(tmp_path, ffmpeg_setup, codec):
 
 
 @pytest.mark.network
+@pytest.mark.smoke
 def test_network_compat_video_download_with_tags(tmp_path, ffmpeg_setup):
-    _download(tmp_path, selectors.video_download_options(240, embed_metadata=True, embed_thumbnail=True))
+    _download(tmp_path, selectors.video_download_options(144, embed_metadata=True, embed_thumbnail=True))
     video = tmp_path / "jNQXAC9IVRw.mp4"
     assert video.is_file() and video.stat().st_size > 50_000
     assert sorted(os.listdir(tmp_path)) == [video.name]

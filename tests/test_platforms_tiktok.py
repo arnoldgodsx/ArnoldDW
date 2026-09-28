@@ -351,6 +351,7 @@ LIVE_PHOTO_VIA_VIDEO_URL = "https://www.tiktok.com/@bbcnews/video/76895394309226
 
 
 @pytest.mark.network
+@pytest.mark.smoke
 def test_live_video_resolve():
     item = tiktok.resolve(LIVE_VIDEO)
     assert item.kind is MediaKind.VIDEO

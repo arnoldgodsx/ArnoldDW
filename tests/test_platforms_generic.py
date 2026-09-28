@@ -209,6 +209,15 @@ def test_live_resolve_supported_sites(name):
 
 
 @pytest.mark.network
+@pytest.mark.smoke
+def test_live_reddit_resolve():
+    result = generic.resolve(LIVE_LINKS["Reddit"])
+    assert isinstance(result, MediaItem)
+    assert result.title
+    assert generic.is_verified(result.extractor)
+
+
+@pytest.mark.network
 def test_live_multi_video_tweet():
     col = generic.resolve("https://x.com/SpaceX/status/2093477720638341395")
     assert isinstance(col, Collection) and len(col.entries) == 2

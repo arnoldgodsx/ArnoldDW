@@ -536,6 +536,16 @@ def test_module_level_api_uses_appdata(tmp_path, monkeypatch):
 
 
 @pytest.mark.network
+@pytest.mark.smoke
+def test_network_check_latest_update(tmp_path, monkeypatch):
+    monkeypatch.setattr(up, "_loaded_version", lambda: None)
+    manager = up.EngineManager(tmp_path / "engine", bundled_version="2020.01.01")
+    info = manager.check_for_update()
+    assert info is not None, "PyPI check failed"
+    assert info.version and info.wheel.sha256 and info.wheel.size > 1_000_000
+
+
+@pytest.mark.network
 def test_network_real_update_install_and_activate(tmp_path, monkeypatch):
     # Other tests import the real yt_dlp into this process; pretend it is not loaded so the
     # fake old bundled version is the baseline.

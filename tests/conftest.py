@@ -6,6 +6,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "network: test needs internet access (skipped unless --network)")
+    config.addinivalue_line("markers", "smoke: fast live check for the nightly platform pulse")
 
 
 def pytest_addoption(parser):
