@@ -33,6 +33,8 @@ try {
     $zipPath = Join-Path $distPath "ArnoldDW-$version-win64.zip"
     if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
     Compress-Archive -Path (Join-Path $appDirectory "*") -DestinationPath $zipPath -CompressionLevel Optimal
+    $zipSize = (Get-Item -LiteralPath $zipPath).Length
+    $installSize = (Get-ChildItem -LiteralPath $appDirectory -File -Recurse | Measure-Object -Property Length -Sum).Sum
 
     $iscc = (Get-Command "ISCC.exe" -ErrorAction SilentlyContinue).Source
     if (-not $iscc) {
@@ -51,13 +53,15 @@ try {
         if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed." }
         $setupPath = Join-Path $distPath "ArnoldDW-$version-setup.exe"
         if (-not (Test-Path -LiteralPath $setupPath)) { throw "Inno Setup output not found: $setupPath" }
+        $setupSize = (Get-Item -LiteralPath $setupPath).Length
     }
     else {
         Write-Warning "Inno Setup 6 was not found; portable ZIP was built, installer skipped."
     }
 
     Write-Host "Build complete: $zipPath"
-    if ($setupPath) { Write-Host "Installer complete: $setupPath" }
+    Write-Host "Installed files: $installSize bytes; portable ZIP: $zipSize bytes"
+    if ($setupPath) { Write-Host "Installer complete: $setupPath ($setupSize bytes)" }
 }
 finally {
     Pop-Location

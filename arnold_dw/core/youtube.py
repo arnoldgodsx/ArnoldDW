@@ -9,9 +9,9 @@ from dataclasses import dataclass
 
 import yt_dlp
 
-from arnold_dw import paths
 from arnold_dw.core import filenames, formats, http
 from arnold_dw.core.errors import DownloadCancelled
+from arnold_dw.core.runtime import binaries
 
 log = logging.getLogger(__name__)
 
@@ -62,6 +62,7 @@ def fetch_preview(url):
         "retries": 2,
         "logger": YtDlpLogger(),
     }
+    ydl_opts.update(binaries.ytdlp_runtime_options())
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
     thumbnail = http.fetch_image(info.get("thumbnail"), timeout=12)
@@ -77,8 +78,7 @@ def build_download_options(fmt, quality, download_dir):
         "outtmpl": filenames.youtube_outtmpl(download_dir),
         "logger": YtDlpLogger(),
     }
-    if os.path.isfile(paths.FFMPEG_PATH):
-        opts["ffmpeg_location"] = paths.FFMPEG_PATH
+    opts.update(binaries.ytdlp_runtime_options())
     opts.update(formats.build_format_options(fmt, quality))
     return opts
 
