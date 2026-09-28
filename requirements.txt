@@ -1,5 +1,6 @@
 customtkinter
 yt-dlp
+yt-dlp-ejs==0.8.0
 pillow
 requests
 imageio-ffmpeg
