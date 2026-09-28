@@ -30,6 +30,12 @@ def test_parse_input_rejects(value):
         instagram.parse_input(value)
 
 
+@pytest.mark.network
+def test_live_public_profile_metadata():
+    profile = instagram.fetch_public_profile(instagram.new_loader(), "natgeo")
+    assert profile.username == "natgeo"
+
+
 def _node(is_video, display, video=None):
     return SimpleNamespace(is_video=is_video, display_url=display, video_url=video)
 

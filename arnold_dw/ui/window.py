@@ -16,6 +16,7 @@ from arnold_dw.core.runners import default_runners
 from arnold_dw.ui.screens.downloads import DownloadsScreen
 from arnold_dw.ui.screens.home import HomeScreen
 from arnold_dw.ui.screens.instagram import InstagramScreen
+from arnold_dw.ui.screens.settings import SettingsScreen
 from arnold_dw.ui.screens.youtube import YouTubeScreen
 from arnold_dw.ui.theme import APP_HEIGHT, APP_WIDTH, BG, SCREEN_PADX, SCREEN_PADY
 from arnold_dw.ui.widgets.navbar import NavBar
@@ -30,6 +31,7 @@ SCREENS = {
     "youtube": YouTubeScreen,
     "instagram": InstagramScreen,
     "downloads": DownloadsScreen,
+    "settings": SettingsScreen,
 }
 
 POLL_INTERVAL_MS = 60
@@ -181,6 +183,10 @@ class ArnoldDW(ctk.CTk):
 
     def active_download_count(self):
         return self.downloads.active_count()
+
+    def has_active_downloads(self):
+        """Used by the settings screen before an engine restart."""
+        return self.downloads.active_count() > 0
 
     def _load_history(self):
         try:

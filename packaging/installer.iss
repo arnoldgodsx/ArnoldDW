@@ -52,11 +52,11 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\Arnold DW"; Filename: "{app}\Arnold DW.exe"
-Name: "{autodesktop}\Arnold DW"; Filename: "{app}\Arnold DW.exe"; Tasks: desktopicon
+Name: "{autoprograms}\Arnold DW"; Filename: "{app}\Arnold DW.exe"; AppUserModelID: "ArnoldDW.YoutubeDownloader.1"
+Name: "{autodesktop}\Arnold DW"; Filename: "{app}\Arnold DW.exe"; Tasks: desktopicon; AppUserModelID: "ArnoldDW.YoutubeDownloader.1"
 
 [Run]
-Filename: "{app}\Arnold DW.exe"; Description: "{cm:LaunchDescription}"; Flags: postinstall nowait skipifsilent
+Filename: "{app}\Arnold DW.exe"; Description: "{cm:LaunchDescription}"; Flags: postinstall nowait
 
 [Code]
 var

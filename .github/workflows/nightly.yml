@@ -1,0 +1,70 @@
+name: Nightly platform pulse
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  platform-pulse:
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.6.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v2.5.6
+
+      - name: Resolve ffmpeg cache key
+        id: ffmpeg
+        shell: pwsh
+        run: |
+          $content = Get-Content -Raw tools/fetch_binaries.py
+          $match = [regex]::Match($content, '"binary_sha256":\s*"([a-f0-9]{64})"')
+          if (-not $match.Success) { throw "Could not read pinned ffmpeg SHA-256" }
+          "hash=$($match.Groups[1].Value)" >> $env:GITHUB_OUTPUT
+
+      - name: Cache verified ffmpeg
+        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.2.2
+        with:
+          path: bin/ffmpeg.exe
+          key: ffmpeg-${{ steps.ffmpeg.outputs.hash }}
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Fetch pinned runtime binaries
+        run: python tools/fetch_binaries.py
+
+      - name: Run platform smoke checks
+        id: smoke
+        shell: pwsh
+        run: |
+          python -m pytest --network -m "network and smoke" 2>&1 | Tee-Object -FilePath pulse.log
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Optional Instagram pulse
+        if: always()
+        continue-on-error: true
+        run: python -m pytest --network -m network tests/test_instagram_core.py::test_live_public_profile_metadata
+
+      - name: Open or update failure issue
+        if: failure() && steps.smoke.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python tools/pulse_issue.py --log-file pulse.log

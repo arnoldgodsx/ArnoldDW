@@ -10,4 +10,4 @@ Bu dizin bağımlılıksız, statik HTML/CSS/JavaScript sitesini içerir. Yerel 
 
 Depo gizliyse GitHub Pages kullanılabilirliği hesabın/kuruluşun planına bağlıdır; özel depolardan Pages yayını ücretli bir plan gerektirebilir. Plan uygun değilse kaynak dizini herkese açık bir depoya taşımadan önce erişim ve lisans kararını verin.
 
-Görseller `assets/` altındadır. Yeni marka görseli hazır olduğunda `arnold-dw-logo.png` değiştirilebilir. İndirme düğmeleri GitHub Releases sayfasına yönelir.
+Marka görselleri `assets/` altındadır: `arnold-dw-logo.png` şeffaf özgün logodur; `favicon.ico`, `favicon-32.png` ve `favicon-16.png` favicon seçenekleridir. Bunlar HQ `assets/brand/` kaynağıyla eşleşmelidir. İndirme düğmeleri GitHub Releases sayfasına yönelir.

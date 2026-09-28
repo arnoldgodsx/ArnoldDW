@@ -20,6 +20,11 @@ def main():
 
     # Import the UI (and through it yt_dlp) only after logging is up. Engine
     # activation (a newer downloaded yt-dlp) must also happen before this import.
+    from arnold_dw.core.runtime import restart, ytdlp_updater
+
+    engine = ytdlp_updater.activate()  # never raises; falls back to the bundled yt-dlp
+    log.info("yt-dlp engine %s (%s)", engine, ytdlp_updater.engine_source())
+
     import customtkinter as ctk
 
     from arnold_dw.ui.window import ArnoldDW
@@ -29,3 +34,4 @@ def main():
     app.mainloop()
     lock.release()
     log.info("%s exited", APP_NAME)
+    restart.relaunch_if_requested()  # "Restart now" after an engine update

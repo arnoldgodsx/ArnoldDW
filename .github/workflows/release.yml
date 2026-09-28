@@ -63,8 +63,17 @@ jobs:
           }
           $zip = "dist/ArnoldDW-$version-win64.zip"
           $setup = "dist/ArnoldDW-$version-setup.exe"
+          $published = (Get-Date).ToUniversalTime().ToString("o")
+          $setupUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$tag/ArnoldDW-$version-setup.exe"
+          $manifestArgs = @(
+            "tools/make_manifest.py", "--setup", $setup, "--version", $version,
+            "--published", $published, "--setup-url", $setupUrl, "--output", "dist/latest.json"
+          )
+          if ($notes) { $manifestArgs += @("--notes-file", $notes) }
+          & python @manifestArgs
+          if ($LASTEXITCODE -ne 0) { throw "Update manifest generation failed." }
           if ($notes) {
-            gh release create $tag $zip $setup --title "Arnold DW $version" --notes-file $notes
+            gh release create $tag $zip $setup dist/latest.json --title "Arnold DW $version" --notes-file $notes
           } else {
-            gh release create $tag $zip $setup --title "Arnold DW $version" --generate-notes
+            gh release create $tag $zip $setup dist/latest.json --title "Arnold DW $version" --generate-notes
           }

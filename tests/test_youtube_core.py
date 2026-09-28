@@ -38,12 +38,19 @@ def test_is_youtube_url_rejects(url):
     assert not youtube.is_youtube_url(url)
 
 
+@pytest.fixture(autouse=True)
+def _isolated_appdata(tmp_path, monkeypatch):
+    # download() reads the saved settings; never touch the real user profile.
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+
+
 def test_build_download_options(tmp_path):
     opts = youtube.build_download_options("MP3", "320 kbps", str(tmp_path))
     assert opts["noplaylist"] is True
     assert opts["windowsfilenames"] is True
     assert opts["outtmpl"] == os.path.join(str(tmp_path), "%(title).150B [%(id)s] 320kbps.%(ext)s")
-    assert opts["postprocessors"][0]["preferredquality"] == "320"
+    extract = [pp for pp in opts["postprocessors"] if pp["key"] == "FFmpegExtractAudio"]
+    assert extract[0]["preferredquality"] == "320"
     assert isinstance(opts["logger"], youtube.YtDlpLogger)
 
 
@@ -59,7 +66,7 @@ class FakeYDL:
     info = {"id": "abc", "title": "Title", "ext": "mp4"}
 
     def __init__(self, opts):
-        self.opts = opts
+        self.opts = self.params = opts
 
     def __enter__(self):
         return self
@@ -204,6 +211,7 @@ def test_cancel_during_processing_is_not_reported_as_cancelled(tmp_path, fake_yd
 
 
 @pytest.mark.network
+@pytest.mark.smoke
 def test_real_preview_me_at_the_zoo():
     preview = youtube.fetch_preview("https://www.youtube.com/watch?v=jNQXAC9IVRw")
     assert preview.info["id"] == "jNQXAC9IVRw"

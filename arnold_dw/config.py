@@ -20,10 +20,25 @@ log = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
 
+VIDEO_MODES = ("compat", "quality")
+ENGINE_CHANNELS = ("stable", "nightly")
+
+
+def _choice(default, choices):
+    """A str setting restricted to `choices`; anything else loads as the default."""
+    return field(default=default, metadata={"choices": choices})
+
 
 @dataclass
 class Settings:
     download_dir: str = field(default_factory=paths.default_download_dir)
+    # MP4 stream choice: "compat" = H.264/AAC that plays everywhere, "quality" = best streams.
+    video_mode: str = _choice("compat", VIDEO_MODES)
+    embed_metadata: bool = True
+    embed_thumbnail: bool = True
+    engine_channel: str = _choice("stable", ENGINE_CHANNELS)
+    engine_auto_check: bool = True
+    last_engine_check: float = 0.0  # time.time() of the last successful engine update check
     max_concurrent: int = 2  # downloads running at the same time (clamped by core.jobs)
 
     def to_dict(self):
@@ -40,7 +55,8 @@ class Settings:
                 continue
             value = data[f.name]
             default = getattr(settings, f.name)
-            if _is_valid(value, default):
+            choices = f.metadata.get("choices")
+            if _is_valid(value, default) and (choices is None or value in choices):
                 setattr(settings, f.name, value)
             else:
                 log.warning("Ignoring invalid setting %s=%r", f.name, value)

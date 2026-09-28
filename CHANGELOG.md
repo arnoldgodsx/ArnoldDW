@@ -8,6 +8,12 @@ Bu dosya [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) biçimini izle
 - Türkçe README, kullanım ve sorun giderme belgeleri.
 - Türkçe ve İngilizce yasal uyarı ile güvenlik açığı bildirim yönergesi.
 - Türkçe/İngilizce tanıtım sitesi.
+- Üçüncü taraf lisans bildirimleri ve tam lisans metinleri.
+
+### Changed
+- Uygulama logosu, simgesi ve tüm platform/gezinme ikonları özgün çizimlerle değiştirildi; üçüncü taraf görsel varlık kalmadı.
+- Tanıtım sayfası 320–768 px yatay taşma kontrolü ve yeni ana ekran görüntüsü.
+- Site stil dosyası okunabilir biçime getirildi.
 
 ## [1.1] - 2026-07-29
 
