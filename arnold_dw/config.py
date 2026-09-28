@@ -24,6 +24,9 @@ SCHEMA_VERSION = 1
 @dataclass
 class Settings:
     download_dir: str = field(default_factory=paths.default_download_dir)
+    # "" = off, otherwise "firefox"/"edge"/"chrome"/"brave" (arnold_dw.core.instagram.SUPPORTED_BROWSERS).
+    # Opt-in only: set from the Instagram screen's "use my browser session" consent step.
+    instagram_browser: str = ""
 
     def to_dict(self):
         return {"schema": SCHEMA_VERSION, **dataclasses.asdict(self)}
