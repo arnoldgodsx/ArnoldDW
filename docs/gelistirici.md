@@ -37,6 +37,14 @@ Ekranlardaki ağ ve disk işleri worker thread'lerde yürür. Worker, sonucu `Sc
 
 `core/platforms` yönlendiricisi henüz bu dalda mevcut değil; mevcut yapı YouTube ve Instagram'a özgü `arnold_dw/core/youtube.py` ve `arnold_dw/core/instagram.py` modüllerini kullanıyor. Yeni akış için bunların ayrımını izleyin: saf seçim/dönüştürme mantığı core'da, kullanıcı etkileşimi ve worker yönetimi ilgili `ui/screens/` modülünde olmalı. Yönlendirici main'e geldiğinde bu bölüm gerçek arayüze göre güncellenmelidir.
 
+### Metin ekleme / çeviri
+
+Kullanıcıya görünen yeni metinleri `arnold_dw/i18n/tr.json` ve `arnold_dw/i18n/en.json` kataloglarına aynı anahtarla ekleyin. Anahtarları `ekran.bölüm.öğe` biçiminde adlandırın (ör. `youtube.quality.title`, `errors.private_video`); parametreleri her iki dilde aynı tutup `{name}` olarak yazın. Sayıya göre değişen metinlerde `anahtar.one` ve `anahtar.other` kullanın; çağrı `t("anahtar", count=n)` biçimindedir.
+
+UI metnini `from arnold_dw.i18n import t` ile alıp `t("anahtar", name=value)` çağrısıyla gösterin. `t()` arayüz modüllerinde kullanılır; `arnold_dw/core/` tkinter/arayüz bağımsız kalır. Yeni hata eşlemeleri core'da i18n anahtarı döndürmemeli; kullanıcıya gösterilecek hata metnini UI katmanı çevirmelidir. Değişiklikten sonra `python tools/i18n_check.py` ile henüz taşınmamış metinleri gözden geçirin. `python tools/i18n_check.py --strict --catalog-only` katalog tutarlılığını CI için hata koduyla denetler; `--strict` tek başına henüz `t()` çağrısına taşınmamış metinleri de hata sayar. Testleri `python -m pytest tests/test_i18n.py` ile çalıştırın.
+
+PyInstaller paketine katalogları eklemek için `ArnoldDW.spec` içindeki `datas` listesine şu satırı ekleyin: `datas += [(str(path), "arnold_dw/i18n") for path in (ROOT / "arnold_dw" / "i18n").glob("*.json")]`.
+
 ## Güncelleme ve tanılama
 
 ### yt-dlp motoru
