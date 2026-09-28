@@ -43,40 +43,54 @@ MP4_VIDEO = "[vcodec~='^(avc|h264|hev|hvc|h265|vp0?9|av0?1)']"
 MP4_AUDIO = "[acodec~='^(mp4a|aac|opus|mp3|ac-?3|ec-?3|flac)']"
 
 
-def _height_filter(max_height: int | None) -> str:
-    if max_height is None:
-        return ""
-    height = int(max_height)
-    if height <= 0:
-        raise ValueError(f"max_height must be positive, got {max_height!r}")
-    return f"[height<={height}]"
+def resolution_sort(max_height: int | None = None) -> list[str]:
+    """yt-dlp ``format_sort`` key that caps resolution by the shorter frame side.
 
+    The canonical resolution cap for every format selector in the app - used directly here
+    and by :func:`core.platforms._ytdlp.format_sort`, so both modules cap resolution the same
+    way (codec preference is a separate concern each module handles on its own: this one
+    through the codec filters baked into :func:`video_selector`, ``_ytdlp`` through extra
+    ``format_sort`` keys, since its selector has no codec filters of its own).
 
-def video_selector(max_height: int | None, prefer: VideoPreference = "compat") -> str:
-    """Format selector for a video download that is merged into MP4.
+    A hard ``[height<=N]`` filter (the old approach) is wrong on two counts: a portrait video
+    (TikTok, Shorts, Reels) reports its height as the *long* side, so "720p" 720x1280 content
+    fails a ``height<=720`` test and the selector falls through to an unbounded alternative -
+    the user picks 720p and gets 1080p instead; and a format with no ``height`` at all (some
+    audio-only or oddly reported formats) is excluded outright instead of just ranked last.
 
-    ``max_height=None`` means no resolution cap. Each alternative is tried in order; the
-    last ones ignore the cap so a video that only exists above it still downloads.
+    ``res:N`` sorts by ``min(width, height)`` - yt-dlp's own definition of the "res" field -
+    so it naturally caps by the short side and never excludes anything: formats at or under
+    the cap are preferred, a missing height sorts to the bottom, and if nothing fits under the
+    cap the closest rung above it still wins instead of the selector failing.
     """
-    h = _height_filter(max_height)
+    if max_height is not None and int(max_height) <= 0:
+        raise ValueError(f"max_height must be positive, got {max_height!r}")
+    return [f"res:{max_height}" if max_height else "res"]
+
+
+def video_selector(prefer: VideoPreference = "compat") -> str:
+    """Codec-preference format selector for a video download that is merged into MP4.
+
+    Resolution is capped separately, via :func:`resolution_sort`'s ``res:N`` key (short-side,
+    never excludes a format outright - see its docstring) passed as the yt-dlp
+    ``format_sort`` option alongside this selector's ``format`` string.
+    """
     if prefer == "compat":
         alternatives = [
-            f"bv{h}{H264}+ba{AAC}",   # separate H.264 + AAC streams (YouTube DASH)
-            f"b{h}{H264}{AAC}",       # single progressive H.264/AAC file
-            f"bv{h}+ba{AAC}",         # keep AAC even if the video codec differs
-            f"bv{h}+ba",
-            f"b{h}",
+            f"bv{H264}+ba{AAC}",   # separate H.264 + AAC streams (YouTube DASH)
+            f"b{H264}{AAC}",       # single progressive H.264/AAC file
+            f"bv+ba{AAC}",         # keep AAC even if the video codec differs
+            "bv+ba",
+            "b",
         ]
     elif prefer == "quality":
         alternatives = [
-            f"bv{h}{MP4_VIDEO}+ba{MP4_AUDIO}",  # best streams that mux into MP4 losslessly
-            f"bv{h}+ba",
-            f"b{h}",
+            f"bv{MP4_VIDEO}+ba{MP4_AUDIO}",  # best streams that mux into MP4 losslessly
+            "bv+ba",
+            "b",
         ]
     else:
         raise ValueError(f"prefer must be 'compat' or 'quality', got {prefer!r}")
-    if h:
-        alternatives += ["bv+ba", "b"]
     return "/".join(alternatives)
 
 
@@ -176,7 +190,7 @@ def video_download_options(
     asks :mod:`binaries` whether ffprobe is available.
     """
     return _compose(
-        {"format": video_selector(max_height, prefer), "merge_output_format": "mp4"},
+        {"format": video_selector(prefer), "format_sort": resolution_sort(max_height), "merge_output_format": "mp4"},
         [],
         "mp4",
         embed_metadata,

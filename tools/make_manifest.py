@@ -4,9 +4,16 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
+import os
 from pathlib import Path
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+KEY_ID = "2026a"
 
 
 def make_manifest(
@@ -15,6 +22,7 @@ def make_manifest(
     published: str,
     notes: str,
     setup_url: str,
+    signing_key: Ed25519PrivateKey | None = None,
 ) -> dict:
     if not setup_path.is_file():
         raise FileNotFoundError(setup_path)
@@ -26,11 +34,37 @@ def make_manifest(
             size += len(chunk)
     if size == 0:
         raise ValueError("Setup installer must not be empty")
-    return {
+    payload = {
         "version": version,
         "published": published,
         "notes": notes,
         "assets": {"setup": {"url": setup_url, "sha256": digest.hexdigest(), "size": size}},
+    }
+    return sign_manifest(payload, signing_key or load_release_key())
+
+
+def load_release_key() -> Ed25519PrivateKey:
+    """Load the release-only PEM secret from its environment variable."""
+    pem = os.environ.get("ARNOLD_DW_RELEASE_KEY")
+    if not pem:
+        raise RuntimeError("ARNOLD_DW_RELEASE_KEY is required to sign the update manifest")
+    try:
+        key = serialization.load_pem_private_key(pem.encode("utf-8"), password=None)
+    except (ValueError, TypeError) as exc:
+        raise RuntimeError("ARNOLD_DW_RELEASE_KEY must contain an unencrypted PEM private key") from exc
+    if not isinstance(key, Ed25519PrivateKey):
+        raise RuntimeError("ARNOLD_DW_RELEASE_KEY must be an Ed25519 private key")
+    return key
+
+
+def sign_manifest(payload: dict, signing_key: Ed25519PrivateKey) -> dict:
+    if not isinstance(signing_key, Ed25519PrivateKey):
+        raise TypeError("signing_key must be an Ed25519 private key")
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    signature = signing_key.sign(canonical)
+    return {
+        "payload": base64.b64encode(canonical).decode("ascii"),
+        "signatures": [{"key_id": KEY_ID, "sig": base64.b64encode(signature).decode("ascii")}],
     }
 
 

@@ -1,14 +1,14 @@
-"""Instagram screen: post link (single/carousel) or username/profile link -> download."""
+"""Instagram screen: post link (single/carousel) or username/profile link -> queue the download."""
 
 import logging
-import threading
 
 import customtkinter as ctk
 
 from arnold_dw.config import save_settings
-from arnold_dw.core import instagram
-from arnold_dw.core.errors import DownloadCancelled, instagram_friendly_error
-from arnold_dw.ui.imaging import make_rounded
+from arnold_dw.core import instagram, runners
+from arnold_dw.core.errors import instagram_friendly_error
+from arnold_dw.core.jobs import DownloadJob
+from arnold_dw.ui.imaging import job_thumbnail, make_rounded
 from arnold_dw.ui.screens.base import Screen
 from arnold_dw.ui.theme import (
     ACCENT,
@@ -27,11 +27,11 @@ from arnold_dw.ui.theme import (
 )
 from arnold_dw.ui.widgets.dropdown import ThemedDropdown
 from arnold_dw.ui.widgets.inputs import InputRow, SaveLocation
+from arnold_dw.ui.widgets.jobviews import JobStrip
 
 log = logging.getLogger(__name__)
 
 RESOLVE_DEBOUNCE_MS = 1200
-FINISH_DELAY_MS = 1800
 
 SINGLE_PREVIEW_SIZE = (300, 230)
 TILE_PREVIEW_SIZE = (104, 120)
@@ -48,20 +48,9 @@ BROWSER_LABELS = {"firefox": "Firefox", "edge": "Edge", "chrome": "Chrome", "bra
 BROWSER_BY_LABEL = {label: key for key, label in BROWSER_LABELS.items()}
 
 
-def progress_text(stage, index, total):
-    if stage == instagram.STAGE_POST_ITEM:
-        return f"{index}/{total} indiriliyor..."
-    if stage == instagram.STAGE_PROFILE_PIC:
-        return "Profil fotoğrafı indiriliyor..."
-    if stage == instagram.STAGE_POST:
-        return f"Gönderi {index} indiriliyor..."
-    if stage == instagram.STAGE_REEL:
-        return f"Reels/video {index} indiriliyor..."
-    return "İndiriliyor..."
-
-
 class InstagramScreen(Screen):
     name = "instagram"
+    tab = "home"
 
     # Shared across visits to the screen, bounded (see core.instagram.ProfileCache).
     profile_cache = instagram.ProfileCache()
@@ -80,8 +69,8 @@ class InstagramScreen(Screen):
         self.instagram_category_vars = {}
         self.instagram_preview_images = []
         self.browser_choice_var = ctk.StringVar(value=BROWSER_LABELS[instagram.SUPPORTED_BROWSERS[0]])
-        self._is_downloading = False
-        self.cancel_event = None
+        self._preview = None     # the resolved PostPreview / ProfilePreview (reused by the job)
+        self._job_thumb = None   # small PIL cover handed to the queued job
 
     # ------------------------------------------------------------------
     # Construction
@@ -114,7 +103,7 @@ class InstagramScreen(Screen):
             corner_radius=10,
             border_width=1,
             border_color=BORDER,
-            height=350,
+            height=330,
         )
         self.preview_card.pack(fill="x", pady=(0, 14))
         self.preview_card.pack_propagate(False)
@@ -124,7 +113,7 @@ class InstagramScreen(Screen):
         self._show_empty()
 
         self.save_location = SaveLocation(self, self.app)
-        self.save_location.pack(fill="x", pady=(0, 18))
+        self.save_location.pack(fill="x", pady=(0, 12))
 
         self.download_btn = ctk.CTkButton(
             self,
@@ -139,23 +128,19 @@ class InstagramScreen(Screen):
             text_color_disabled=TEXT_FAINT,
             font=(FONT_FAMILY, 15, "bold"),
         )
-        self.download_btn.pack(fill="x")
+        self.download_btn.pack(fill="x", pady=(0, 12))
+
+        self.strip = JobStrip(self, self.app)
+        self.strip.refresh()
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def is_busy(self):
-        return self._is_downloading
-
-    def shutdown(self):
-        if self.cancel_event is not None:
-            self.cancel_event.set()
-        return super().shutdown()
+    def on_job_event(self, kind, payload):
+        self.strip.refresh()
 
     def _go_home(self):
-        if self.is_busy():
-            return
         self.app.show_screen("home")
 
     # ------------------------------------------------------------------
@@ -216,6 +201,8 @@ class InstagramScreen(Screen):
         self.instagram_profile_avatar = None
         self.instagram_media = []
         self.instagram_category_vars = {}
+        self._preview = None
+        self._job_thumb = None
         self._set_status("")
         self.download_btn.configure(
             state="disabled",
@@ -262,22 +249,27 @@ class InstagramScreen(Screen):
                     make_rounded(img, size, radius=radius) if img is not None else None
                     for img in preview.thumbnails
                 ]
-                self.post("post_ok", rid, preview, images)
+                cover = next((img for img in preview.thumbnails if img is not None), None)
+                job_thumb = job_thumbnail(cover) if cover is not None else None
+                self.post("post_ok", rid, preview, images, job_thumb)
             else:
                 avatar = None
                 if preview.avatar is not None:
                     avatar = make_rounded(preview.avatar, AVATAR_SIZE, radius=36)
-                self.post("profile_ok", rid, preview, avatar)
+                job_thumb = job_thumbnail(preview.avatar) if preview.avatar is not None else None
+                self.post("profile_ok", rid, preview, avatar, job_thumb)
         except Exception as exc:
             log.warning("Instagram resolve failed for %r", value, exc_info=True)
             self.post("resolve_err", rid, instagram_friendly_error(exc))
 
-    def on_post_ok(self, rid, preview, images):
+    def on_post_ok(self, rid, preview, images, job_thumb):
         if rid == self.request_id:
+            self._preview, self._job_thumb = preview, job_thumb
             self._apply_post(preview.post, preview.media, images)
 
-    def on_profile_ok(self, rid, preview, avatar):
+    def on_profile_ok(self, rid, preview, avatar, job_thumb):
         if rid == self.request_id:
+            self._preview, self._job_thumb = preview, job_thumb
             self._apply_profile(preview.profile, avatar)
 
     def on_resolve_err(self, rid, err):
@@ -554,102 +546,45 @@ class InstagramScreen(Screen):
         )
 
     # ------------------------------------------------------------------
-    # Download
+    # Download (queued through app.downloads - see core.jobs / core.runners)
     # ------------------------------------------------------------------
 
     def _on_download(self):
-        if self._is_downloading:
-            if self.cancel_event is not None:
-                self.cancel_event.set()
-            self.download_btn.configure(
-                state="disabled",
-                fg_color=SURFACE_3,
-                text="İptal ediliyor...",
-            )
-            return
-
         if self.instagram_mode == "post":
-            selected_media = [
+            selected = [
                 item
                 for item, var in zip(self.instagram_media, self.instagram_media_vars, strict=False)
                 if var.get()
             ]
-            if not selected_media:
+            if not selected:
                 return
-            job = ("post", self.instagram_post, selected_media, None)
+            post = self.instagram_post
+            options = runners.instagram_post_options(post.shortcode, [item["index"] for item in selected])
+            url = instagram.post_url(post.shortcode)
+            kind = "Carousel" if len(self.instagram_media) > 1 else (
+                "Video" if self.instagram_media[0]["is_video"] else "Fotoğraf")
+            title = f"@{post.owner_username} · {kind}"
         elif self.instagram_mode == "profile":
             categories = [key for key, var in self.instagram_category_vars.items() if var.get()]
             if not categories:
                 return
-            job = ("profile", self.instagram_profile, categories, self.app.settings.instagram_browser or None)
+            profile = self.instagram_profile
+            browser = self.app.settings.instagram_browser or None
+            options = runners.instagram_profile_options(profile.username, categories, browser=browser)
+            url = instagram.profile_url(profile.username)
+            title = f"@{profile.username} · Profil"
         else:
             return
 
-        self._is_downloading = True
-        self.cancel_event = threading.Event()
-        self.input_row.set_locked(True)
-        self.save_location.set_enabled(False)
-        self.download_btn.configure(
-            state="normal",
-            fg_color=SURFACE_2,
-            hover_color=SURFACE_3,
-            text="İptal Et",
-        )
-        self._set_status("İndirme başlatılıyor...", TEXT_MUTED)
-
-        self.start_worker(self._download_worker, job, self.app.download_dir, self.cancel_event, track=True)
-
-    def _download_worker(self, job, download_dir, cancel_event):
-        mode, target, selection, browser = job
-
-        def on_progress(stage, index, total):
-            self.post("progress", progress_text(stage, index, total))
-
-        try:
-            if mode == "post":
-                downloaded = instagram.download_post(target, selection, download_dir, cancel_event, on_progress)
-            else:
-                downloaded = instagram.download_profile(target, selection, download_dir, cancel_event,
-                                                        on_progress, browser=browser)
-            log.info("Instagram %s download finished: %d file(s)", mode, downloaded)
-            self.post("download_done", downloaded)
-        except DownloadCancelled:
-            self.post("download_cancelled")
-        except Exception as exc:
-            log.exception("Instagram %s download failed", mode)
-            self.post("download_err", instagram_friendly_error(exc))
-
-    def on_progress(self, text):
-        self._set_status(text, TEXT_MUTED)
-
-    def on_download_done(self, _downloaded):
-        self._is_downloading = False
-        self.cancel_event = None
-        self._set_status("")
-        self.download_btn.configure(
-            state="disabled",
-            text="Tamamlandı",
-            fg_color=SUCCESS,
-        )
-        self.schedule(FINISH_DELAY_MS, self._finish_download_ui)
-
-    def on_download_cancelled(self):
-        self._set_status("İndirme iptal edildi", TEXT_MUTED)
-        self._restore_inputs()
-
-    def on_download_err(self, err):
-        self._set_status(err, ERROR)
-        self._restore_inputs()
-
-    def _restore_inputs(self):
-        self._is_downloading = False
-        self.cancel_event = None
-        self.input_row.set_locked(False)
-        self.save_location.set_enabled(True)
-        self.download_btn.configure(text="İndir")
-        self.download_btn.configure(hover_color=ACCENT_HOVER)
-        self._update_download_state()
-
-    def _finish_download_ui(self):
-        self._restore_inputs()
+        manager = self.app.downloads
+        if manager.find_active(runners.PLATFORM_INSTAGRAM, url, options) is not None:
+            self._set_status("Bu seçim zaten indiriliyor.", TEXT_MUTED)
+            return
+        manager.enqueue(DownloadJob(
+            platform=runners.PLATFORM_INSTAGRAM, url=url, title=title, download_dir=self.app.download_dir,
+            options=options, context=self._preview, thumbnail_image=self._job_thumb,
+        ))
+        log.info("Instagram download queued: %s %s", url, options)
+        # Ready for the next link right away.
         self._clear_input()
+        self._set_status("İndirmelere eklendi. Yeni bir bağlantı yapıştırabilirsiniz.", SUCCESS)

@@ -28,6 +28,8 @@ UninstallDisplayIcon={app}\Arnold DW.exe
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+WizardImageFile=wizard_large.bmp,wizard_large_highdpi.bmp
+WizardSmallImageFile=wizard_small.bmp,wizard_small_highdpi.bmp
 CloseApplications=yes
 Uninstallable=yes
 

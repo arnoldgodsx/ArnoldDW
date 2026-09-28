@@ -65,6 +65,18 @@ def mp3_postprocessors(bitrate):
     }]
 
 
+def filename_label(fmt, quality):
+    """Quality tag put into the file name ("720p", "4K", "192kbps") so re-downloading
+    the same video in another quality creates a new file instead of being skipped."""
+    if fmt == FORMAT_MP3:
+        return f"{AUDIO_BITRATE.get(quality, '192')}kbps"
+    return quality if quality in QUALITY_HEIGHTS else f"{DEFAULT_MAX_HEIGHT}p"
+
+
+def output_extension(fmt):
+    return ".mp3" if fmt == FORMAT_MP3 else ".mp4"
+
+
 def build_format_options(fmt, quality):
     """yt-dlp options selecting the streams for a format ("MP4"/"MP3") + quality label."""
     if fmt == FORMAT_MP3:

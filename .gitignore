@@ -5,4 +5,5 @@ __pycache__/
 *.pyc
 *.pyo
 bin/*.exe
+bin/*.dll
 *.egg-info/

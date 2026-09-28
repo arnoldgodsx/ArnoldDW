@@ -40,6 +40,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.parse
 import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -55,6 +56,9 @@ EJS_PROJECT = "yt-dlp-ejs"
 PACKAGES = ("yt_dlp", "yt_dlp_ejs")
 PYPI_PROJECT_URL = "https://pypi.org/pypi/{project}/json"
 PYPI_RELEASE_URL = "https://pypi.org/pypi/{project}/{version}/json"
+# Hosts a metadata/wheel response is trusted to end on, after redirects. A compromised CDN
+# edge or on-path attacker downgrading a redirect to plain HTTP must not be followed.
+ALLOWED_RESPONSE_HOSTS = frozenset({"pypi.org", "files.pythonhosted.org"})
 STATE_FILE = "state.json"
 MANIFEST_FILE = "engine.json"
 STATE_SCHEMA = 1
@@ -245,16 +249,31 @@ class EngineManager:
         return float(value) if isinstance(value, (int, float)) else None
 
     def installed_versions(self) -> list[str]:
-        """Complete engine directories, newest first."""
+        """Complete engine directories, newest first.
+
+        A directory only counts as installed when its own ``engine.json`` agrees that it is
+        the version its name claims - a mismatch (partial install interrupted mid-rename,
+        local tampering) is never activated, never offered as a rollback target, and gets
+        swept up by the next :meth:`_prune`.
+        """
         try:
             names = os.listdir(self.root)
         except OSError:
             return []
         versions = [
             n for n in names
-            if not n.startswith(".") and parse_version(n) and os.path.isfile(self._manifest_path(n))
+            if not n.startswith(".") and parse_version(n) and same_version(self._manifest_version(n), n)
         ]
         return sorted(versions, key=parse_version, reverse=True)
+
+    def _manifest_version(self, version: str) -> str | None:
+        try:
+            with open(self._manifest_path(version), encoding="utf-8") as fh:
+                manifest = json.load(fh)
+        except (OSError, ValueError):
+            return None
+        value = manifest.get("version") if isinstance(manifest, dict) else None
+        return value if isinstance(value, str) else None
 
     # -- state ----------------------------------------------------------------
 
@@ -421,6 +440,7 @@ class EngineManager:
     def _get_json(self, url: str) -> dict:
         response = self._http().get(url, timeout=TIMEOUT)
         response.raise_for_status()
+        _verify_response_origin(response.url)
         data = response.json()
         if not isinstance(data, dict):
             raise ValueError(f"unexpected JSON from {url}")
@@ -456,18 +476,22 @@ class EngineManager:
             raise UpdateError("PyPI lists no usable releases")
         return max(usable, key=parse_version)
 
-    def check_for_update(self, channel: Channel = "stable") -> UpdateInfo | None:
+    def check_for_update(self, channel: Channel = "stable", *, raise_errors: bool = False) -> UpdateInfo | None:
         """Newest yt-dlp on PyPI if it beats everything already available, else ``None``.
 
         ``channel="nightly"`` also considers yt-dlp's nightly builds (published to PyPI as
         ``.devN`` releases), which usually carry YouTube fixes days before a stable release.
-        Network and parsing errors are logged and reported as "no update".
+        Network and parsing errors are logged and reported as "no update", or raised as
+        :class:`UpdateError` when ``raise_errors`` is set (so a UI can tell "up to date"
+        from "could not check").
         """
         try:
             info = self._build_update_info(channel)
         except Exception as exc:
             log.warning("yt-dlp update check failed: %s", exc)
-            return None
+            if not raise_errors:
+                return None
+            raise _check_error(exc) from exc
         with contextlib.suppress(OSError):
             self._update_state(last_check=time.time())
         return info
@@ -595,6 +619,7 @@ class EngineManager:
         size = 0
         with self._http().get(dist.url, stream=True, timeout=TIMEOUT) as response:
             response.raise_for_status()
+            _verify_response_origin(response.url)
             with open(path, "wb") as fh:
                 for chunk in response.iter_content(CHUNK_SIZE):
                     _check_cancel(cancel_event)
@@ -680,6 +705,22 @@ class EngineManager:
                 shutil.rmtree(path, ignore_errors=True)
 
 
+def _verify_response_origin(final_url: str) -> None:
+    """Reject a response that a redirect carried off HTTPS or onto an untrusted host.
+
+    ``requests`` follows redirects by default without re-checking scheme/host; an on-path
+    attacker or a compromised CDN edge could otherwise downgrade an HTTPS request to plain
+    HTTP mid-chain, letting a MITM swap the PyPI metadata or wheel bytes en route even though
+    the original request was HTTPS.
+    """
+    host = (urllib.parse.urlsplit(final_url).hostname or "").lower()
+    if urllib.parse.urlsplit(final_url).scheme != "https" or host not in ALLOWED_RESPONSE_HOSTS:
+        raise UpdateError(
+            f"refusing response from untrusted URL after redirect: {final_url}",
+            "Motor güncellemesi güvenilmeyen bir adrese yönlendirildi; işlem durduruldu.",
+        )
+
+
 def _check_cancel(cancel_event) -> None:
     if cancel_event is not None and cancel_event.is_set():
         raise UpdateCancelled()
@@ -697,6 +738,47 @@ def _as_update_error(exc: Exception) -> UpdateError:
     if isinstance(exc, OSError):
         return UpdateError(f"disk error: {exc}", "Motor güncellemesi diske yazılamadı.")
     return UpdateError(f"{type(exc).__name__}: {exc}")
+
+
+def _check_error(exc: Exception) -> UpdateError:
+    return UpdateError(f"{type(exc).__name__}: {exc}",
+                       "Güncellemeler denetlenemedi. İnternet bağlantınızı kontrol edin.")
+
+
+def engine_failure_reason(exc: BaseException | None) -> str | None:
+    """Describe ``exc`` if it shows the yt-dlp engine itself is broken, else ``None``.
+
+    A half-working engine (a new yt-dlp whose submodule is missing or renamed) surfaces as
+    ImportError/AttributeError raised from inside the ``yt_dlp`` package, possibly wrapped by
+    yt-dlp's own DownloadError (``exc_info``) or chained. Errors raised elsewhere - our own
+    hooks, network problems, unavailable videos - never count.
+    """
+    seen: set[int] = set()
+    stack = [exc]
+    while stack:
+        current = stack.pop()
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+        if isinstance(current, (ImportError, AttributeError)) and _raised_in_engine(current):
+            return f"{type(current).__name__}: {current}"[:500]
+        exc_info = getattr(current, "exc_info", None)
+        if isinstance(exc_info, tuple) and len(exc_info) == 3:
+            stack.append(exc_info[1])
+        stack.extend([current.__cause__, current.__context__])
+    return None
+
+
+def _raised_in_engine(exc: BaseException) -> bool:
+    tb = exc.__traceback__
+    last = None
+    while tb is not None:
+        last = tb.tb_frame.f_code.co_filename
+        tb = tb.tb_next
+    if last is None:
+        return False
+    parts = os.path.normcase(os.path.normpath(last)).split(os.sep)
+    return any(p in PACKAGES for p in parts[:-1])
 
 
 def _extract_wheel(wheel_path: str, dest: str) -> None:
@@ -752,8 +834,8 @@ def activate(verify: bool = True) -> str:
         return default_manager().current_version() or "unknown"
 
 
-def check_for_update(channel: Channel = "stable") -> UpdateInfo | None:
-    return default_manager().check_for_update(channel)
+def check_for_update(channel: Channel = "stable", *, raise_errors: bool = False) -> UpdateInfo | None:
+    return default_manager().check_for_update(channel, raise_errors=raise_errors)
 
 
 def download_and_install(
@@ -766,3 +848,32 @@ def download_and_install(
 
 def current_version() -> str | None:
     return default_manager().current_version()
+
+
+def engine_source() -> str:
+    return default_manager().engine_source()
+
+
+def installed_version() -> str | None:
+    return default_manager().installed_version()
+
+
+def restart_required() -> bool:
+    return default_manager().restart_required()
+
+
+def mark_active_broken(reason: str) -> bool:
+    return default_manager().mark_active_broken(reason)
+
+
+def report_failure(exc: BaseException) -> bool:
+    """Mark the running engine broken if ``exc`` came from inside it. Never raises.
+
+    Returns True when the engine was marked (the next start rolls back to the previous one).
+    """
+    try:
+        reason = engine_failure_reason(exc)
+        return bool(reason) and default_manager().mark_active_broken(reason)
+    except Exception:
+        log.exception("could not record the engine failure")
+        return False

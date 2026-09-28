@@ -79,6 +79,27 @@ STAGE_POST = "post"                # index = n-th profile post, total None
 STAGE_REEL = "reel"                # index = n-th profile video, total None
 
 
+def progress_text(stage, index, total):
+    """User-facing (Turkish) text for an on_progress(stage, index, total) report."""
+    if stage == STAGE_POST_ITEM:
+        return f"{index}/{total} indiriliyor..."
+    if stage == STAGE_PROFILE_PIC:
+        return "Profil fotoğrafı indiriliyor..."
+    if stage == STAGE_POST:
+        return f"Gönderi {index} indiriliyor..."
+    if stage == STAGE_REEL:
+        return f"Reels/video {index} indiriliyor..."
+    return "İndiriliyor..."
+
+
+def post_url(shortcode):
+    return f"https://www.instagram.com/p/{shortcode}/"
+
+
+def profile_url(username):
+    return f"https://www.instagram.com/{username}/"
+
+
 def parse_input(value):
     """Classify user input: ("post", shortcode) or ("profile", username).
 
@@ -401,13 +422,17 @@ def download_media(item, folder, basename, cancel_event):
 
 
 def _download_via_ytdlp(url, folder, basename, cancel_event):
-    """Download a reel/video through yt-dlp (proper format selection + audio/video merge)."""
+    """Download a reel/video through yt-dlp (proper format selection + audio/video merge).
+
+    Returns (path, created): created=False when a matching file already existed.
+    """
     _check_cancel(cancel_event)
     _ensure_not_cooling_down()
     safe_name = filenames.safe_filename_part(basename)
     for ext in ("mp4", "mkv", "webm"):
-        if os.path.exists(os.path.join(folder, f"{safe_name}.{ext}")):
-            return False
+        existing = os.path.join(folder, f"{safe_name}.{ext}")
+        if os.path.exists(existing):
+            return existing, False
 
     opts = _ytdlp.base_options(_ffmpeg_location())
     opts["outtmpl"] = os.path.join(folder, f"{safe_name}.%(ext)s")
@@ -423,22 +448,39 @@ def _download_via_ytdlp(url, folder, basename, cancel_event):
     opts["progress_hooks"] = [hook]
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.extract_info(url, download=True)
+            info = ydl.extract_info(url, download=True)
     except yt_dlp.utils.DownloadCancelled as exc:
         raise DownloadCancelled() from exc
     except Exception as exc:
         _guard_rate_limit(exc)
-    return True
+    for rd in (info or {}).get("requested_downloads") or []:
+        path = rd.get("filepath") or rd.get("filename")
+        if path:
+            return path, True
+    return os.path.join(folder, f"{safe_name}.mp4"), True  # merge_output_format guarantees this
 
 
-def _download_item(item, folder, basename, cancel_event):
+def _download_item(item, folder, basename, cancel_event, on_file=None):
+    """Download one media item (either engine). Returns 1 if a new file was written, else 0.
+
+    on_file(path, created) is called for every item: created=False when it already existed.
+    """
     if item.get("engine") == "ytdlp":
-        return _download_via_ytdlp(item["url"], folder, basename, cancel_event)
-    return download_media(item, folder, basename, cancel_event)
+        path, created = _download_via_ytdlp(item["url"], folder, basename, cancel_event)
+    else:
+        created = download_media(item, folder, basename, cancel_event)
+        path = filenames.media_path(folder, basename, item["is_video"])
+    if on_file is not None:
+        on_file(path, created)
+    return 1 if created else 0
 
 
-def download_post(post, items, folder, cancel_event, on_progress=None):
-    """Download the selected `items` (from post_media/resolve) of one post. Returns files written."""
+def download_post(post, items, folder, cancel_event, on_progress=None, on_file=None):
+    """Download the selected `items` (from post_media/resolve) of one post. Returns files written.
+
+    on_file(path, created) is called for every selected file: created=False
+    when it already existed and was left untouched.
+    """
     os.makedirs(folder, exist_ok=True)
     downloaded = 0
     for position, item in enumerate(items, start=1):
@@ -447,8 +489,7 @@ def download_post(post, items, folder, cancel_event, on_progress=None):
         if not item.get("url"):
             continue
         basename = filenames.instagram_post_basename(post.owner_username, post.shortcode, item["index"])
-        if _download_item(item, folder, basename, cancel_event):
-            downloaded += 1
+        downloaded += _download_item(item, folder, basename, cancel_event, on_file)
     return downloaded
 
 
@@ -498,7 +539,7 @@ def _guard_cookie_error(browser, captured_messages, exc):
     _guard_rate_limit(exc)
 
 
-def _download_collection_via_ytdlp(url, folder, cancel_event, on_progress, browser, stage):
+def _download_collection_via_ytdlp(url, folder, cancel_event, on_progress, browser, stage, on_file=None):
     _check_cancel(cancel_event)
     _ensure_not_cooling_down()
     captured = []
@@ -533,26 +574,34 @@ def _download_collection_via_ytdlp(url, folder, cancel_event, on_progress, brows
     entries = (info or {}).get("entries")
     if entries is None:
         entries = [info] if info else []
+    if on_file is not None:
+        for entry in entries:
+            for rd in (entry or {}).get("requested_downloads") or []:
+                path = rd.get("filepath") or rd.get("filename")
+                if path:
+                    on_file(path, True)
     return len(entries)
 
 
-def _download_profile_bulk(username, categories, folder, cancel_event, on_progress, browser):
+def _download_profile_bulk(username, categories, folder, cancel_event, on_progress, browser, on_file=None):
     downloaded = 0
     for category in categories:
         url = _BULK_CATEGORY_URLS[category].format(username=username)
         downloaded += _download_collection_via_ytdlp(
-            url, folder, cancel_event, on_progress, browser, _BULK_CATEGORY_STAGE[category]
+            url, folder, cancel_event, on_progress, browser, _BULK_CATEGORY_STAGE[category], on_file
         )
     return downloaded
 
 
-def download_profile(profile, categories, folder, cancel_event, on_progress=None, *, browser=None):
+def download_profile(profile, categories, folder, cancel_event, on_progress=None, on_file=None, *, browser=None):
     """Download the chosen categories of a profile. Returns files written.
 
     `profile_pic` is always attempted anonymously (public profiles only - see `resolve`).
     `posts`/`reels` need an opted-in `browser` (cookiesfrombrowser name); without one this
     raises `InstagramSessionRequired` rather than trying an anonymous listing (CX-3-T08: not
-    reliable). A private profile never downloads anything.
+    reliable). A private profile never downloads anything. `on_file(path, created)` is called
+    for every file written (see `download_post`); the bulk yt-dlp step always reports
+    created=True since yt-dlp handles its own dedup there.
     """
     if profile.is_private:
         raise Exception(f"Profile {profile.username}: private but not followed.")
@@ -568,15 +617,15 @@ def download_profile(profile, categories, folder, cancel_event, on_progress=None
         report(STAGE_PROFILE_PIC)
         if profile.profile_pic_url:
             pic_item = {"is_video": False, "url": profile.profile_pic_url}
-            if download_media(pic_item, folder, filenames.instagram_profile_pic_basename(profile.username),
-                              cancel_event):
-                downloaded += 1
+            downloaded += _download_item(pic_item, folder,
+                                         filenames.instagram_profile_pic_basename(profile.username),
+                                         cancel_event, on_file)
 
     bulk_categories = [c for c in categories if c != CATEGORY_PROFILE_PIC]
     if bulk_categories:
         if not browser:
             raise InstagramSessionRequired()
         downloaded += _download_profile_bulk(profile.username, bulk_categories, folder, cancel_event,
-                                             on_progress, browser)
+                                             on_progress, browser, on_file)
 
     return downloaded

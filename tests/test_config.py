@@ -82,7 +82,10 @@ def test_save_writes_schema_and_round_trips(cfg):
     assert save_settings(Settings(download_dir="D:\\Medya"), cfg)
     with open(cfg, encoding="utf-8") as f:
         data = json.load(f)
-    assert data == {"schema": SCHEMA_VERSION, "download_dir": "D:\\Medya", "instagram_browser": ""}
+    assert data["schema"] == SCHEMA_VERSION
+    assert data["download_dir"] == "D:\\Medya"
+    assert data["max_concurrent"] == 2
+    assert data["instagram_browser"] == ""
     assert load_settings(cfg).download_dir == "D:\\Medya"
 
 

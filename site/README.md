@@ -8,6 +8,8 @@ Bu dizin bağımlılıksız, statik HTML/CSS/JavaScript sitesini içerir. Yerel 
 2. Bu kaynak `site/` altında olduğu için **Build and deployment** bölümünde **GitHub Actions** dağıtımını seçin ve Pages artifact'i olarak `site/` içeriğini yükleyen bir workflow yapılandırın. Alternatif olarak `site/` içeriğini Pages'in dal tabanlı kaynak olarak sunduğu kök veya `/docs` klasörüne yayımlayın.
 3. Pages'in verdiği adres üzerinden yayını kontrol edin.
 
+Pages adresi etkinleşince `index.html` içindeki `rel="canonical"` ve `og:url` değerlerini verilen kesin HTTPS adresiyle güncelleyin. `og:image` şu an GitHub deposundaki sosyal önizleme görselini kullanır; Pages'te kalıcı bir görsel adresi sunulabiliyorsa onu da yeni mutlak URL'ye taşıyın.
+
 Depo gizliyse GitHub Pages kullanılabilirliği hesabın/kuruluşun planına bağlıdır; özel depolardan Pages yayını ücretli bir plan gerektirebilir. Plan uygun değilse kaynak dizini herkese açık bir depoya taşımadan önce erişim ve lisans kararını verin.
 
-Görseller `assets/` altındadır. Yeni marka görseli hazır olduğunda `arnold-dw-logo.png` değiştirilebilir. İndirme düğmeleri GitHub Releases sayfasına yönelir.
+Marka görselleri `assets/` altındadır: `arnold-dw-logo.png` şeffaf özgün logodur; `favicon.ico`, `favicon-32.png` ve `favicon-16.png` favicon seçenekleridir. Bunlar HQ `assets/brand/` kaynağıyla eşleşmelidir. İndirme düğmeleri GitHub Releases sayfasına yönelir.

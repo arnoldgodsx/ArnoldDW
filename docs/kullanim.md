@@ -26,3 +26,24 @@ Uygulama Instagram profil öğelerini seçili indirme klasörüne yazar. Aynı a
 ## İndirme klasörünü değiştirme
 
 YouTube ekranındaki **Kayıt Konumu** alanı geçerli klasörü gösterir. **Gözat** düğmesine basıp var olan bir klasör seçin. Bu seçim YouTube ve Instagram indirmelerinde kullanılır ve uygulama ayarlarında saklanır.
+
+## YouTube video ve gömme seçeneklerini değiştirme
+
+Ana ekrandaki dişli (⚙) düğmesiyle **Ayarlar** ekranını açın. **İndirme** bölümünde video modunu seçebilirsiniz:
+
+- **Maksimum uyumluluk (H.264):** H.264 görüntü ve AAC ses kullanır; geniş oynatıcı ve telefon uyumluluğu sağlar. YouTube bu modda en fazla 1080p sunar.
+- **En yüksek kalite:** Kaynağın en iyi akışlarını (varsa VP9 veya AV1) 4K'ya kadar kullanır. Bazı eski oynatıcılar bu dosyaları açamayabilir.
+
+Başlık, sanatçı ve bölüm bilgilerinin dosyaya gömülmesini ve kapak görselinin eklenmesini açıp kapatabilirsiniz. Bu seçenekler ffmpeg gerektirir; MP4'e kapak eklemek için ayrıca ffprobe gerekir. Gerekli araçlardan biri yoksa Ayarlar ekranında bildirilir.
+
+## İndirme motorunu güncelleme
+
+Ana ekrandaki dişli düğmesinden **Ayarlar** ekranını açın. **İndirme motoru** bölümü yüklü yt-dlp sürümünü ve uygulamayla gelip gelmediğini gösterir. **Güncellemeleri denetle** ile yeni sürüm arayın. Yeni sürüm bulunursa yüklemeyi başlatmak için **İndir ve kur** seçeneğini onaylayın; mevcut sürümü korumak için **Vazgeç**'i seçin. İndirme sırasında güncellemeyi iptal edebilirsiniz.
+
+**Kararlı** kanalı normal sürümleri, **Nightly** kanalı erken düzeltmeleri sunar. Nightly YouTube değişikliklerini birkaç gün önce çözebilir; sorun çıkarsa uygulama önceki motora dönebilir. Günde bir kez otomatik denetimi açabilirsiniz; güncelleme yalnızca onayınızla kurulur. Kurulumdan sonra yeni motoru etkinleştirmek için **Şimdi yeniden başlat**'ı seçin. Etkin indirmeler varsa yeniden başlatma bunları iptal edeceğinden uygulama onay ister.
+
+Ayarlar ekranındaki **Yardımcı araçlar** durumu JavaScript çalışma zamanının, ffmpeg'in ve ffprobe'un bulunup bulunmadığını gösterir. Tanılama kayıtlarını görmek için **Hakkında** bölümünde **Log klasörünü aç** düğmesini kullanın.
+
+## English
+
+See the [English user guide](en/usage.md).

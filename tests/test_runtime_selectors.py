@@ -64,12 +64,18 @@ def _select(fmt, formats, **params):
     return result.get("format_id")
 
 
+def _select_capped(formats, max_height, prefer="compat"):
+    """Resolve a video/audio pair the way :func:`selectors.video_download_options` would:
+    codec-preference selector + the ``format_sort`` resolution cap together."""
+    return _select(selectors.video_selector(prefer), formats, format_sort=selectors.resolution_sort(max_height))
+
+
 @pytest.mark.parametrize(
     ("max_height", "expected"),
     [(360, "134+140"), (720, "136+140"), (1080, "137+140"), (2160, "137+140"), (None, "137+140")],
 )
 def test_compat_picks_h264_aac(max_height, expected):
-    assert _select(selectors.video_selector(max_height, "compat"), YOUTUBE_LIKE) == expected
+    assert _select_capped(YOUTUBE_LIKE, max_height, "compat") == expected
 
 
 @pytest.mark.parametrize(
@@ -77,7 +83,7 @@ def test_compat_picks_h264_aac(max_height, expected):
     [(360, {"134", "243"}), (720, {"398"}), (1080, {"399"}), (2160, {"401"}), (None, {"401"})],
 )
 def test_quality_picks_best_video(max_height, expected_video):
-    picked = _select(selectors.video_selector(max_height, "quality"), YOUTUBE_LIKE)
+    picked = _select_capped(YOUTUBE_LIKE, max_height, "quality")
     video, audio = picked.split("+")
     assert video in expected_video
     assert audio in {"251", "140"}
@@ -85,17 +91,39 @@ def test_quality_picks_best_video(max_height, expected_video):
 
 def test_compat_keeps_aac_when_site_has_no_h264():
     formats = [_audio("a-aac", "mp4a.40.2", "m4a", 128), _audio("a-opus", "opus", "webm", 160), _video("v-vp9", 720, "vp9", "webm")]
-    assert _select(selectors.video_selector(1080), formats) == "v-vp9+a-aac"
+    assert _select_capped(formats, 1080) == "v-vp9+a-aac"
 
 
 def test_compat_accepts_generic_codec_names():
     formats = [_muxed("hd", 720, "h264", "aac"), _muxed("webm", 1080, "vp8", "vorbis", ext="webm")]
-    assert _select(selectors.video_selector(1080), formats) == "hd"
+    assert _select_capped(formats, 1080) == "hd"
 
 
 def test_cap_falls_back_to_smallest_step_above():
     formats = [_muxed("only-hd", 1080, "avc1.64001F", "mp4a.40.2")]
-    assert _select(selectors.video_selector(360), formats) == "only-hd"
+    assert _select_capped(formats, 360) == "only-hd"
+
+
+def test_portrait_video_is_capped_by_short_side():
+    # 720x1280 portrait is "720p" by its short side, even though its `height` field (1280) is
+    # the long side - the bug this fix addresses (TikTok, Shorts, Reels).
+    formats = [
+        _muxed("landscape-1080", 1080, "avc1.4d401f", "mp4a.40.2"),  # 1920x1080, short side 1080
+        {"format_id": "portrait-720", "url": "https://example.invalid/portrait-720", "ext": "mp4",
+         "protocol": "https", "height": 1280, "width": 720, "vcodec": "avc1.4d401f",
+         "acodec": "mp4a.40.2", "tbr": 1700},
+        {"format_id": "portrait-540", "url": "https://example.invalid/portrait-540", "ext": "mp4",
+         "protocol": "https", "height": 960, "width": 540, "vcodec": "avc1.4d401f",
+         "acodec": "mp4a.40.2", "tbr": 900},
+    ]
+    assert _select_capped(formats, 720) == "portrait-720"
+
+
+def test_unknown_height_is_not_excluded():
+    # A format missing `height` must still be selectable, just ranked behind known-good ones.
+    formats = [{"format_id": "unk", "url": "https://example.invalid/unk", "ext": "mp4", "protocol": "https",
+               "vcodec": "avc1.4d401f", "acodec": "mp4a.40.2", "tbr": 500}]
+    assert _select_capped(formats, 720) == "unk"
 
 
 def test_quality_skips_codecs_that_do_not_fit_mp4():
@@ -105,7 +133,7 @@ def test_quality_skips_codecs_that_do_not_fit_mp4():
         _audio("a-vorbis", "vorbis", "webm", 192),
         _audio("a-opus", "opus", "webm", 160),
     ]
-    assert _select(selectors.video_selector(None, "quality"), formats) == "v9+a-opus"
+    assert _select_capped(formats, None, "quality") == "v9+a-opus"
 
 
 @pytest.mark.parametrize(("codec", "expected"), [("mp3", "251"), ("m4a", "140"), ("opus", "251")])
@@ -124,9 +152,9 @@ def test_audio_selector_falls_back_to_muxed_file():
 
 def test_invalid_arguments():
     with pytest.raises(ValueError):
-        selectors.video_selector(720, "best")
+        selectors.video_selector("best")
     with pytest.raises(ValueError):
-        selectors.video_selector(0)
+        selectors.resolution_sort(0)
     with pytest.raises(ValueError):
         selectors.audio_postprocessors("flac")
     with pytest.raises(ValueError):
@@ -143,7 +171,12 @@ def test_audio_postprocessors():
 
 def test_plain_downloads_match_current_app_behaviour():
     video = selectors.video_download_options(720)
-    assert video == {"format": selectors.video_selector(720), "merge_output_format": "mp4", "postprocessors": []}
+    assert video == {
+        "format": selectors.video_selector(),
+        "format_sort": selectors.resolution_sort(720),
+        "merge_output_format": "mp4",
+        "postprocessors": [],
+    }
     audio = selectors.audio_download_options("mp3", 192)
     assert audio["format"] == "ba/b"
     assert audio["postprocessors"] == selectors.audio_postprocessors("mp3", 192)
@@ -246,10 +279,11 @@ def zoo_info():
         return ydl.extract_info(ZOO_URL, download=False)
 
 
-def _resolve(info, fmt):
+def _resolve(info, fmt, format_sort=None):
     import yt_dlp
 
-    opts = {"quiet": True, "no_warnings": True, "format": fmt, **binaries.ytdlp_runtime_options()}
+    opts = {"quiet": True, "no_warnings": True, "format": fmt, "format_sort": format_sort or [],
+            **binaries.ytdlp_runtime_options()}
     with yt_dlp.YoutubeDL(opts) as ydl:
         selector = ydl.build_format_selector(fmt)
         ctx = {"formats": info["formats"], "has_merged_format": True, "incomplete_formats": False}
@@ -261,7 +295,7 @@ def _resolve(info, fmt):
 @pytest.mark.network
 @pytest.mark.parametrize("max_height", [144, 240, 360])
 def test_network_compat_selects_h264_and_aac(zoo_info, max_height):
-    parts = _resolve(zoo_info, selectors.video_selector(max_height, "compat"))
+    parts = _resolve(zoo_info, selectors.video_selector("compat"), selectors.resolution_sort(max_height))
     vcodecs = [p["vcodec"] for p in parts if p.get("vcodec") not in (None, "none")]
     acodecs = [p["acodec"] for p in parts if p.get("acodec") not in (None, "none")]
     assert vcodecs and all(v.startswith("avc1") for v in vcodecs), parts
@@ -274,7 +308,7 @@ def test_network_compat_selects_h264_and_aac(zoo_info, max_height):
 
 @pytest.mark.network
 def test_network_quality_selects_highest_resolution(zoo_info):
-    parts = _resolve(zoo_info, selectors.video_selector(None, "quality"))
+    parts = _resolve(zoo_info, selectors.video_selector("quality"))
     top = max(f["height"] for f in zoo_info["formats"] if f.get("height"))
     assert max(p.get("height") or 0 for p in parts) == top
     audio = [p for p in parts if p.get("acodec") not in (None, "none")]
@@ -344,8 +378,9 @@ def test_network_audio_download_with_tags(tmp_path, ffmpeg_setup, codec):
 
 
 @pytest.mark.network
+@pytest.mark.smoke
 def test_network_compat_video_download_with_tags(tmp_path, ffmpeg_setup):
-    _download(tmp_path, selectors.video_download_options(240, embed_metadata=True, embed_thumbnail=True))
+    _download(tmp_path, selectors.video_download_options(144, embed_metadata=True, embed_thumbnail=True))
     video = tmp_path / "jNQXAC9IVRw.mp4"
     assert video.is_file() and video.stat().st_size > 50_000
     assert sorted(os.listdir(tmp_path)) == [video.name]

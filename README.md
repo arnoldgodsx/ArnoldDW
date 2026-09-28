@@ -1,5 +1,7 @@
 # Arnold DW
 
+![Arnold DW](docs/images/social-preview.png)
+
 Arnold DW, YouTube ve Instagram içeriklerini Windows bilgisayarınıza indirmenizi sağlayan masaüstü uygulamasıdır. Bağlantıyı yapıştırın, önizlemeyi görün ve indirme seçeneklerini belirleyin.
 
 ![Arnold DW ana ekranı](docs/images/baseline-home.png)
@@ -37,12 +39,18 @@ python app.py
 
 ## Proje yapısı
 
-Mevcut giriş noktası `app.py`; paketler `arnold_dw/`, testler `tests/`, kullanıcı belgeleri `docs/`, tanıtım sitesi `site/` altındadır. Hedef mimaride uygulama `arnold_dw/core/` (indirme motoru ve platformlar) ile `arnold_dw/ui/` (ekranlar ve bileşenler) olarak ayrılır; derleme ve bağımlı dosya araçları `tools/` altında tutulur. Bu hedefin ayrıntıları ekip içi `hq/ROADMAP.md` dosyasındadır.
+Uygulama `arnold_dw/main.py` üzerinden başlar; çekirdek mantık `arnold_dw/core/`, ekranlar `arnold_dw/ui/`, testler `tests/`, belgeler `docs/`, tanıtım sitesi `site/` altındadır. Mimari, katkı tarifleri ve yayınlama ayrıntıları için [geliştirici rehberine](docs/gelistirici.md) bakın.
 
 ## Üçüncü taraf lisansları
 
 Dağıtılan paketlerin lisans ve atıfları için [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) ile yanındaki `licenses/` tam metinlerine bakın.
 
+## Kullanıcı belgeleri
+
+- [Kullanım kılavuzu](docs/kullanim.md)
+- [Sık sorulan sorular ve sorun giderme](docs/sss.md)
+- [Yasal uyarı](DISCLAIMER.md)
+
 ## English
 
-Arnold DW is a Windows desktop app for downloading individual YouTube videos as MP4 or MP3 and selected Instagram posts, reels, carousels, and public profile content. TikTok is not currently supported. Download the Windows installer from [GitHub Releases](https://github.com/arnoldgodsx/ArnoldDW/releases/latest). Use the app only for content you own or are allowed to download.
+Read the [complete English README](README.en.md) for working features, installation, developer setup, and project links.

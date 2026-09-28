@@ -152,6 +152,27 @@ def test_download_post_reports_progress_and_names_files(tmp_path, serve):
     assert progress == [(instagram.STAGE_POST_ITEM, 1, 2), (instagram.STAGE_POST_ITEM, 2, 2)]
 
 
+def _collect(files):
+    return lambda p, c: files.append((p, c))
+
+
+def test_download_post_reports_on_file(tmp_path, serve):
+    serve(FakeResponse([b"x"]))
+    post = SimpleNamespace(owner_username="user", shortcode="SC")
+    items = [{"index": 1, "is_video": False, "url": "a"}]
+    dest = str(tmp_path / "dl")
+    files = []
+    instagram.download_post(post, items, dest, threading.Event(), on_file=_collect(files))
+    assert len(files) == 1
+    path, created = files[0]
+    assert created is True
+    assert os.path.basename(path) == "instagram_user_SC_01.jpg"
+
+    files.clear()
+    instagram.download_post(post, items, dest, threading.Event(), on_file=_collect(files))
+    assert files[0][1] is False  # already existed the second time
+
+
 def test_download_profile_pic_only_needs_no_browser(tmp_path, serve):
     serve(FakeResponse([b"x"]))
     profile = instagram.ProfileInfo(username="u", profile_pic_url="pic")
@@ -165,6 +186,15 @@ def test_download_profile_pic_only_needs_no_browser(tmp_path, serve):
     assert progress == [(instagram.STAGE_PROFILE_PIC, None, None)]
 
 
+def test_download_profile_reports_on_file(tmp_path, serve):
+    serve(FakeResponse([b"x"]))
+    profile = instagram.ProfileInfo(username="u", profile_pic_url="pic")
+    files = []
+    instagram.download_profile(profile, [instagram.CATEGORY_PROFILE_PIC], str(tmp_path), threading.Event(),
+                               on_file=_collect(files))
+    assert len(files) == 1 and files[0][1] is True
+
+
 def test_download_profile_bulk_categories_require_a_browser_session(tmp_path):
     profile = instagram.ProfileInfo(username="u")
     with pytest.raises(InstagramSessionRequired):
@@ -175,7 +205,7 @@ def test_download_profile_bulk_categories_use_ytdlp_per_category(tmp_path, monke
     profile = instagram.ProfileInfo(username="u")
     calls = []
 
-    def fake_collection(url, folder, cancel_event, on_progress, browser, stage):
+    def fake_collection(url, folder, cancel_event, on_progress, browser, stage, on_file=None):
         calls.append((url, browser, stage))
         return 2
 
@@ -194,7 +224,8 @@ def test_download_profile_bulk_categories_use_ytdlp_per_category(tmp_path, monke
 def test_download_profile_private_is_never_attempted(tmp_path):
     profile = instagram.ProfileInfo(username="u", is_private=True, profile_pic_url="pic")
     with pytest.raises(Exception, match="private"):
-        instagram.download_profile(profile, [instagram.CATEGORY_PROFILE_PIC], str(tmp_path), threading.Event())
+        instagram.download_profile(profile, [instagram.CATEGORY_PROFILE_PIC], str(tmp_path),
+                                   threading.Event())
     assert os.listdir(tmp_path) == []
 
 
@@ -249,6 +280,18 @@ def test_resolve_reel_uses_ytdlp_and_not_instaloader(monkeypatch):
     assert preview.media == [{
         "index": 1, "is_video": True, "engine": "ytdlp", "url": REEL_URL, "thumbnail_url": "t.jpg",
     }]
+
+
+def test_download_post_via_ytdlp_reports_on_file_with_real_path(tmp_path, monkeypatch):
+    info = {"requested_downloads": [{"filepath": str(tmp_path / "clip.mp4")}]}
+    _patch_ytdlp(monkeypatch, info=info)
+    post = instagram.PostRef(shortcode="SC", owner_username="user")
+    items = [{"index": 1, "is_video": True, "engine": "ytdlp", "url": REEL_URL, "thumbnail_url": None}]
+
+    files = []
+    count = instagram.download_post(post, items, str(tmp_path), threading.Event(), on_file=_collect(files))
+    assert count == 1
+    assert files == [(str(tmp_path / "clip.mp4"), True)]
 
 
 def test_resolve_photo_falls_back_to_instaloader_on_no_video(monkeypatch):

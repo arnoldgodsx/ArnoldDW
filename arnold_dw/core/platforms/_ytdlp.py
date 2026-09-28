@@ -1,7 +1,10 @@
 """Shared yt-dlp plumbing for the platform engines.
 
 Format selectors here are intentionally simple (prefer H.264/AAC in MP4 for
-compatibility); they will be unified with ``core/runtime/selectors.py`` in Phase 2.
+compatibility); ranking is done entirely through ``format_sort`` since :func:`video_format`
+has no codec filters of its own. The resolution cap (the ``res:N`` key) is shared with
+``core/runtime/selectors.py``'s ``resolution_sort`` so both modules cap resolution the same
+way; the codec-preference keys added here are specific to this module's unfiltered selector.
 """
 
 from __future__ import annotations
@@ -14,6 +17,7 @@ from typing import Any
 
 import yt_dlp
 
+from ..runtime.selectors import resolution_sort
 from .errors import DownloadCancelled, to_platform_error
 from .models import DownloadOptions, MediaItem, MediaKind, Platform, Progress
 
@@ -172,7 +176,7 @@ def item_from_info(info: dict, platform: Platform, *, default_kind: MediaKind = 
 
 
 # --------------------------------------------------------------------------
-# Format selection (simple; Phase 2 moves this to core/runtime/selectors.py)
+# Format selection
 # --------------------------------------------------------------------------
 
 def video_format(video_filter: str = "") -> str:
@@ -182,14 +186,11 @@ def video_format(video_filter: str = "") -> str:
 
 
 def format_sort(max_height: int | None = None, *, codec_first: bool = False) -> list[str]:
-    """yt-dlp ``format_sort`` keys: resolution cap + H.264/AAC preference for compatibility.
-
-    ``res:N`` ranks by the shorter frame side (so portrait videos are capped
-    correctly) and falls back to the closest larger rung instead of failing.
-    With ``codec_first`` an H.264 stream wins even over a sharper H.265/VP9/AV1
-    one - used where the higher rungs are H.265 only (TikTok).
+    """yt-dlp ``format_sort`` keys: resolution cap (see ``resolution_sort``) + H.264/AAC
+    preference for compatibility. With ``codec_first`` an H.264 stream wins even over a
+    sharper H.265/VP9/AV1 one - used where the higher rungs are H.265 only (TikTok).
     """
-    res = f"res:{max_height}" if max_height else "res"
+    res = resolution_sort(max_height)[0]
     keys = [res, "vcodec:h264", "acodec:aac"]
     if codec_first:
         keys = ["vcodec:h264", res, "acodec:aac"]
