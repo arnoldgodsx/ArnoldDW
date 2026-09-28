@@ -54,7 +54,7 @@ HARNESS = textwrap.dedent('''
             out["ejs_file"] = yt_dlp_ejs.__file__
             if mode == "extract":
                 opts = {"quiet": True, "no_warnings": True, "skip_download": True,
-                        "format": selectors.video_selector(360), **binaries.ytdlp_runtime_options()}
+                        "format": selectors.video_selector(), **binaries.ytdlp_runtime_options()}
                 with yt_dlp.YoutubeDL(opts) as ydl:
                     info = ydl.extract_info("https://www.youtube.com/watch?v=jNQXAC9IVRw", download=False)
                 out["formats"] = [[f["format_id"], f.get("vcodec"), f.get("acodec")]

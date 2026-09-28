@@ -53,6 +53,17 @@ PyInstaller paketine katalogları eklemek için `ArnoldDW.spec` içindeki `datas
 
 Başlangıçta `EngineFinder`, güncel kullanıcı motorunu PyInstaller'ın paketli importundan önce seçer. İçe aktarma doğrulaması başarısız olursa motor bozuk olarak işaretlenir, finder kaldırılır ve sonraki kullanılabilir sürüme ya da paketlenmiş yt-dlp'ye geri dönülür. Kurulum tamamlanan motoru sonraki başlangıçta etkinleştirir.
 
+#### Tehdit modeli
+
+Güven zinciri, PyPI'nin TLS'ine ve `yt-dlp`/`yt-dlp-ejs` yayın hesaplarının bütünlüğüne dayanır: metadata `pypi.org`'un JSON API'sinden, wheel `files.pythonhosted.org`'dan alınır ve indirilen baytlar o JSON'daki SHA-256 ile doğrulanır - ayrı, uygulamaya gömülü bir imza yoktur. Bu nedenle PyPI hesabı veya yayın kanalı ele geçirilirse metadata ile wheel birlikte değiştirilebilir; bu risk kabul edilmiş ve hafifletilmiştir, ortadan kaldırılmamıştır (bkz. `hq/reports/CX-3-T20.md` P1). Hafifletmeler:
+
+- **Redirect'te HTTPS/host düşürme reddi:** `requests` yönlendirmeleri sessizce takip eder; `_verify_response_origin` hem metadata (`_get_json`) hem wheel (`_download`) yanıtlarının nihai `response.url`'ünün hâlâ HTTPS ve `pypi.org`/`files.pythonhosted.org` olduğunu doğrular, aksi hâlde günceleme reddedilir. Bu, aradaki bir saldırganın yönlendirmeyi HTTP'ye ya da başka bir hosta düşürmesini engeller; PyPI'nin kendisinin ele geçirilmesine karşı koruma sağlamaz.
+- **Boyut + SHA-256 doğrulaması:** indirilen wheel, PyPI JSON'unda ilan edilen boyut ve SHA-256 ile eşleşmeli; eşleşmezse kurulum iptal edilir ve önceki motor yerinde kalır.
+- **`state.json` ↔ `engine.json` tutarlılığı:** bir motor dizini yalnızca kendi `engine.json` manifestindeki `version` alanı dizin adıyla eşleşiyorsa "kurulu" sayılır (`installed_versions`). Yarım kalan bir kurulum veya yerel kurcalama bu eşleşmeyi bozar; böyle bir dizin asla etkinleştirilmez, geri dönüş hedefi olarak sunulmaz ve bir sonraki `_prune` çağrısında silinir.
+- **`remote_components=["ejs:github"]` kararı:** yt-dlp'nin YouTube "n"/imza çözücü betikleri normalde uygulamayla birlikte gelen `yt-dlp-ejs` paketinden okunur (ağ erişimi gerekmez). Bu ayar yalnızca yerel `yt-dlp-ejs` sürümü aktif motorun beklediği sürümle uyuşmadığında (ör. motor güncellemesinden hemen sonra, ejs paketi henüz gelmemişse) devreye girip yt-dlp'nin kendi GitHub release akışından çekmesine izin verir; yt-dlp bu betikleri kendi kodunda gömülü hash'lerle doğrular. Bu, ekstra bir ağ yolu açar ama korumasız değildir; yalnızca uyumsuzluk durumunda tetiklenir ve içerik hash ile doğrulanır.
+
+Bu katman, aynı kullanıcı hesabıyla çalışan yerel bir sürece karşı tam koruma sağlamaz (dosya izinleri/ACL doğrulaması yapılmaz); tehdit modeli ağ üzerinden gelen (MITM, redirect, ele geçirilmiş yayın) saldırılara odaklıdır. Ayrıntılı bulgular ve önerilen ileri adımlar (manifest imzalama, ACL doğrulaması) için `hq/reports/CX-3-T20.md`.
+
 ### Uygulama güncellemesi
 
 `arnold_dw/core/appupdate.py` GitHub Releases `latest.json` manifestini okur. Daha yeni sürümün kurulum dosyası URL, pozitif boyut ve SHA-256 ile doğrulanır; indirme boyutu sınırlandırılır, hash eşleşince `.part` dosyası atomik olarak son adına taşınır. `launch_installer` Inno Setup'ı çalıştırır. Bu modülün check/download/launch işlevleri şu an UI akışına bağlanmamıştır. Manifest üretimini `tools/make_manifest.py`, etiketli yayın akışını `.github/workflows/release.yml` yürütür.
