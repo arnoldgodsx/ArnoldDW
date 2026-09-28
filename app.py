@@ -2308,6 +2308,8 @@ class ArnoldDW(ctk.CTk):
 
 
 def main():
+    if sys.argv[1:] == ["--version"]:
+        return
     ctk.set_appearance_mode("dark")
     app = ArnoldDW()
     app.mainloop()
