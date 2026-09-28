@@ -58,7 +58,7 @@ def main() -> int:
         ytdlp_version = yt_dlp.version.__version__
     except (ImportError, AttributeError):
         ytdlp_version = "unavailable"
-    pulse_date = args.date or dt.datetime.now(dt.timezone.utc).date().isoformat()
+    pulse_date = args.date or dt.datetime.now(dt.UTC).date().isoformat()
     title, body = build_issue(log_text, pulse_date, ytdlp_version)
 
     if args.dry_run:
