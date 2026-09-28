@@ -23,7 +23,8 @@ SCRIPT = textwrap.dedent("""
     for mod in pkgutil.walk_packages(arnold_dw.core.__path__, "arnold_dw.core."):
         importlib.import_module(mod.name)
         imported.append(mod.name)
-    for name in ("arnold_dw", "arnold_dw.paths", "arnold_dw.config", "arnold_dw.log"):
+    for name in ("arnold_dw", "arnold_dw.paths", "arnold_dw.config", "arnold_dw.log",
+                 "arnold_dw.single_instance"):
         importlib.import_module(name)
     leaked = [m for m in sys.modules if m.split(".")[0] in ("tkinter", "_tkinter", "customtkinter")]
     assert not leaked, leaked
@@ -37,5 +38,6 @@ def test_core_modules_import_without_tkinter():
     )
     assert result.returncode == 0, result.stderr
     imported = set(result.stdout.split())
-    for name in ("formats", "errors", "filenames", "text", "http", "youtube", "instagram"):
+    for name in ("formats", "errors", "filenames", "text", "http", "youtube", "instagram",
+                 "progress", "jobs", "history", "runners"):
         assert f"arnold_dw.core.{name}" in imported
