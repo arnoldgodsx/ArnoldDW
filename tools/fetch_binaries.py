@@ -126,7 +126,9 @@ def fetch_tool(name: str, force: bool = False) -> Path:
             return destination
 
     destination_dir.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix=f"arnold-dw-{name}-") as temporary_dir:
+    # Stage inside the destination directory: os.replace below must stay on one volume
+    # (on CI the checkout is on D: while the system temp dir is on C:).
+    with tempfile.TemporaryDirectory(prefix=f".fetch-{name}-", dir=destination_dir) as temporary_dir:
         temporary = Path(temporary_dir)
         archive_path = temporary / "download.zip"
         print(f"Downloading {name} {tool['version']} from {tool['url']}")
