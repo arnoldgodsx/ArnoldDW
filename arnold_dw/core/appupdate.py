@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import json
+import logging
 import os
 import re
 import subprocess
@@ -15,9 +17,17 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
 DEFAULT_FEED_URL = "https://github.com/arnoldgodsx/ArnoldDW/releases/latest/download/latest.json"
 CHUNK_SIZE = 128 * 1024
 MAX_MANIFEST_BYTES = 1024 * 1024
+TRUSTED_KEYS = {
+    "2026a": bytes.fromhex("e1b5e84a1a6ce55183bd9346fe0061ab48bef86fb273d2882269eb74d5aa447c"),
+}
+ASSET_HOSTS = frozenset({"github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"})
+logger = logging.getLogger(__name__)
 _VERSION = re.compile(
     r"^v?(?P<epoch>\d+!)?(?P<release>\d+(?:\.\d+)*)(?P<pre>[-_.]?(?:a|b|rc|alpha|beta|c|pre|preview)[-_.]?\d*)?"
     r"(?P<post>(?:-(?:\d+)|[-_.]?(?:post|rev|r)[-_.]?\d*))?(?P<dev>[-_.]?dev[-_.]?\d*)?"
@@ -40,6 +50,8 @@ class UpdateNetworkError(UpdateError):
 class UpdateValidationError(UpdateError):
     """The manifest or downloaded asset did not pass validation."""
 
+    user_message = "Güncelleme doğrulanamadı"
+
 
 class UpdateCancelled(UpdateError):
     """The user cancelled an update download."""
@@ -53,6 +65,7 @@ class UpdateInfo:
     url: str
     sha256: str
     size: int
+    feed_host: str = ""
 
 
 def _parse_version(value: str) -> tuple:
@@ -104,39 +117,89 @@ def is_newer(candidate: str, current: str) -> bool:
     return _parse_version(candidate) > _parse_version(current)
 
 
-def _http_url(value: object, field: str) -> str:
+def _https_url(value: object, field: str, allowed_hosts: set[str] | frozenset[str] | None = None) -> str:
     if not isinstance(value, str):
         raise UpdateValidationError(f"Manifest {field} must be a URL string")
     parsed = urllib.parse.urlparse(value)
-    if parsed.scheme not in ("https", "http") or not parsed.netloc:
-        raise UpdateValidationError(f"Manifest {field} must use HTTP or HTTPS")
+    if parsed.scheme.lower() != "https" or not parsed.hostname or parsed.username or parsed.password:
+        raise UpdateValidationError(f"Manifest {field} must use HTTPS")
+    if allowed_hosts is not None and parsed.hostname.lower() not in allowed_hosts:
+        raise UpdateValidationError(f"Manifest {field} host is not allowed")
     return value
 
 
-def _read_manifest(url: str, timeout: float) -> dict:
-    _http_url(url, "feed URL")
+def _response_url(response, field: str, allowed_hosts: set[str] | frozenset[str]) -> str:
+    final_url = getattr(response, "url", None)
+    if not final_url and hasattr(response, "geturl"):
+        final_url = response.geturl()
+    return _https_url(final_url, f"final {field} URL", allowed_hosts)
+
+
+def _canonical_json(data: object) -> bytes:
+    return json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+
+
+def verify_manifest(wrapper: object) -> dict:
+    """Verify a signed envelope before decoding or returning any payload fields."""
+    try:
+        if not isinstance(wrapper, dict) or set(wrapper) != {"payload", "signatures"}:
+            raise ValueError("expected signed manifest envelope")
+        payload_text = wrapper["payload"]
+        signatures = wrapper["signatures"]
+        if not isinstance(payload_text, str) or not isinstance(signatures, list) or not signatures:
+            raise ValueError("manifest envelope fields are invalid")
+        payload = base64.b64decode(payload_text, validate=True)
+        seen = set()
+        verified = False
+        for entry in signatures:
+            if not isinstance(entry, dict) or set(entry) != {"key_id", "sig"}:
+                raise ValueError("manifest signature entry is invalid")
+            key_id, signature_text = entry["key_id"], entry["sig"]
+            if not isinstance(key_id, str) or key_id not in TRUSTED_KEYS:
+                raise ValueError(f"unknown signing key id: {key_id!r}")
+            if key_id in seen:
+                raise ValueError(f"duplicate signing key id: {key_id}")
+            seen.add(key_id)
+            signature = base64.b64decode(signature_text, validate=True)
+            try:
+                Ed25519PublicKey.from_public_bytes(TRUSTED_KEYS[key_id]).verify(signature, payload)
+                verified = True
+            except InvalidSignature:
+                continue
+        if not verified:
+            raise ValueError("manifest signature verification failed")
+        data = json.loads(payload.decode("utf-8"))
+        if not isinstance(data, dict) or _canonical_json(data) != payload:
+            raise ValueError("signed manifest payload is not canonical JSON")
+        return data
+    except (ValueError, TypeError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        logger.warning("Update manifest signature/validation rejected: %s", exc)
+        raise UpdateValidationError(f"{UpdateValidationError.user_message}: {exc}") from exc
+
+
+def _read_manifest(url: str, timeout: float) -> tuple[dict, str]:
+    feed_host = urllib.parse.urlparse(_https_url(url, "feed URL")).hostname.lower()
     request = urllib.request.Request(url, headers={"User-Agent": "ArnoldDW-Updater/1.0"})
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
+            _response_url(response, "feed", {feed_host})
             body = response.read(MAX_MANIFEST_BYTES + 1)
     except (OSError, urllib.error.URLError, TimeoutError) as exc:
         raise UpdateNetworkError(f"Could not fetch update manifest: {exc}") from exc
     if len(body) > MAX_MANIFEST_BYTES:
         raise UpdateValidationError("Update manifest is too large")
     try:
-        data = json.loads(body)
+        wrapper = json.loads(body)
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise UpdateValidationError("Update manifest is not valid JSON") from exc
-    if not isinstance(data, dict):
-        raise UpdateValidationError("Update manifest must be a JSON object")
-    return data
+    return verify_manifest(wrapper), feed_host
 
 
 def check(current_version: str, feed_url: str = DEFAULT_FEED_URL, timeout: float = 10) -> UpdateInfo | None:
     """Return validated update metadata when the feed has a newer release."""
     try:
         current_key = _parse_version(current_version)
-        data = _read_manifest(feed_url, timeout)
+        data, feed_host = _read_manifest(feed_url, timeout)
         version = data.get("version")
         if not isinstance(version, str):
             raise UpdateValidationError("Manifest version must be a string")
@@ -147,7 +210,8 @@ def check(current_version: str, feed_url: str = DEFAULT_FEED_URL, timeout: float
         setup = assets.get("setup") if isinstance(assets, dict) else None
         if not isinstance(setup, dict):
             raise UpdateValidationError("Manifest is missing the setup asset")
-        url = _http_url(setup.get("url"), "setup URL")
+        allowed_hosts = ASSET_HOSTS | {feed_host}
+        url = _https_url(setup.get("url"), "setup URL", allowed_hosts)
         digest = setup.get("sha256")
         size = setup.get("size")
         if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", digest):
@@ -158,7 +222,7 @@ def check(current_version: str, feed_url: str = DEFAULT_FEED_URL, timeout: float
         notes = data.get("notes", "")
         if not isinstance(published, str) or not isinstance(notes, str):
             raise UpdateValidationError("Manifest published and notes fields must be strings")
-        return UpdateInfo(version, published, notes, url, digest.lower(), size)
+        return UpdateInfo(version, published, notes, url, digest.lower(), size, feed_host)
     except (ValueError, TypeError) as exc:
         if isinstance(exc, UpdateError):
             raise
@@ -172,7 +236,8 @@ def download(
     cancel_event: threading.Event | None = None,
 ) -> Path:
     """Download, bound, hash-check, then atomically publish the installer."""
-    _http_url(info.url, "setup URL")
+    allowed_hosts = ASSET_HOSTS | ({info.feed_host.lower()} if info.feed_host else set())
+    _https_url(info.url, "setup URL", allowed_hosts)
     if info.size <= 0 or not re.fullmatch(r"[0-9a-f]{64}", info.sha256):
         raise UpdateValidationError("Update metadata is invalid")
     directory = Path(dest_dir)
@@ -181,10 +246,10 @@ def download(
     part_path = final_path.with_name(final_path.name + ".part")
     digest = hashlib.sha256()
     total = 0
-    limit = info.size + max(1, info.size // 20)
     request = urllib.request.Request(info.url, headers={"User-Agent": "ArnoldDW-Updater/1.0"})
     try:
         with urllib.request.urlopen(request, timeout=30) as response, part_path.open("wb") as output:
+            _response_url(response, "setup", allowed_hosts)
             while True:
                 if cancel_event is not None and cancel_event.is_set():
                     raise UpdateCancelled("Update download cancelled")
@@ -192,7 +257,7 @@ def download(
                 if not chunk:
                     break
                 total += len(chunk)
-                if total > limit:
+                if total > info.size:
                     raise UpdateValidationError("Downloaded setup exceeds the manifest size limit")
                 digest.update(chunk)
                 output.write(chunk)
@@ -200,8 +265,8 @@ def download(
                     progress_cb(total, info.size)
         if cancel_event is not None and cancel_event.is_set():
             raise UpdateCancelled("Update download cancelled")
-        if total == 0:
-            raise UpdateValidationError("Downloaded setup is empty")
+        if total != info.size:
+            raise UpdateValidationError("Downloaded setup size does not match manifest")
         if digest.hexdigest() != info.sha256:
             raise UpdateValidationError("Downloaded setup SHA-256 does not match manifest")
         os.replace(part_path, final_path)

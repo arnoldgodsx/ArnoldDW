@@ -46,20 +46,20 @@ jobs:
           cache: pip
           cache-dependency-path: requirements.txt
 
-      - name: Resolve ffmpeg cache key
-        id: ffmpeg
+      - name: Resolve runtime binary cache key
+        id: runtime
         shell: pwsh
         run: |
           $content = Get-Content -Raw tools/fetch_binaries.py
-          $match = [regex]::Match($content, '"binary_sha256":\s*"([a-f0-9]{64})"')
-          if (-not $match.Success) { throw "Could not read pinned ffmpeg SHA-256" }
-          "hash=$($match.Groups[1].Value)" >> $env:GITHUB_OUTPUT
+          $hashes = [regex]::Matches($content, '"archive_sha256":\s*"([a-f0-9]{64})"') | ForEach-Object { $_.Groups[1].Value }
+          if ($hashes.Count -lt 2) { throw "Could not read pinned runtime archive SHA-256 values" }
+          "hash=$($hashes -join '-')" >> $env:GITHUB_OUTPUT
 
-      - name: Cache verified ffmpeg
+      - name: Cache verified runtime binaries
         uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.2.2
         with:
-          path: bin/ffmpeg.exe
-          key: ffmpeg-${{ steps.ffmpeg.outputs.hash }}
+          path: bin
+          key: runtime-${{ steps.runtime.outputs.hash }}
 
       - name: Install dependencies
         run: python -m pip install -r requirements.txt pyinstaller

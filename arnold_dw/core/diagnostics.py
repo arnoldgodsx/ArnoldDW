@@ -18,12 +18,16 @@ _SENSITIVE = re.compile(
     r"[\"']?\s*[:=]\s*[\"']?)([^\"'\s,;}&]+)"
 )
 _URL_QUERY = re.compile(r"(https?://[^\s\"'<>?]+\?)[^\s\"'<>#]+", re.I)
+_INSTALOADER_SESSION = re.compile(r"(?i)(\\session-)[^\\/\s\"']+")
+_YTDLP_PRIVATE_ARG = re.compile(r"(?i)(--cookies(?:-from-browser)?(?:=|\s+))(\"[^\"]*\"|'[^']*'|[^\s]+)")
 
 
 def _mask_text(value, username=None):
     text = str(value)
     if username:
         text = re.sub(re.escape(username), "<user>", text, flags=re.I)
+    text = _INSTALOADER_SESSION.sub(r"\1<redacted>", text)
+    text = _YTDLP_PRIVATE_ARG.sub(r"\1<redacted>", text)
     text = _URL_QUERY.sub(r"\1<redacted>", text)
     return _SENSITIVE.sub(lambda match: (match.group(1) or match.group(2)) + "<redacted>", text)
 

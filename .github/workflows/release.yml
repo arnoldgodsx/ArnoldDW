@@ -44,6 +44,7 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARNOLD_DW_RELEASE_KEY: ${{ secrets.ARNOLD_DW_RELEASE_KEY }}
         run: |
           $tag = "${{ github.ref_name }}"
           $version = (& python -c "from arnold_dw import __version__; print(__version__)").Trim()

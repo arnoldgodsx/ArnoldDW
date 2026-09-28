@@ -125,17 +125,24 @@ Uygulama logosu, uygulama simgesi (`logo/icon.ico`, `logo/app-logo.png`) ve tüm
 - **Telif:** Copyright © 2011 Google; font dosyalarındaki ek bildirimler saklıdır.
 - **Tam metin:** [licenses/Apache-2.0.txt](licenses/Apache-2.0.txt).
 
+### Deno
+
+- **Version:** Deno `2.9.7`, downloaded from the official Windows x64 MSVC release asset. Archive SHA-256: `a0c3101b4158d1dfb7d6a78a7bf0f3de80c96bb423c152beec8beb22786f2238`. Only `deno.exe` is included.
+- **License:** MIT. Full text: [licenses/Deno-MIT.txt](licenses/Deno-MIT.txt), copied from the official Deno `v2.9.7` source tag.
+- **Project/source:** [Deno v2.9.7 source](https://github.com/denoland/deno/tree/v2.9.7).
+
 ### FFmpeg
 
-- **Sürüm:** CX-1'in `tools/fetch_binaries.py` dosyası Gyan.dev `ffmpeg-9.0.2-essentials_build.zip` arşivini indirir. Sabit arşiv SHA-256: `60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba`; FFmpeg ikili SHA-256: `3256173f3f8bffd7df12227c68adf68025edb1832273a9530688a7bb1ed8edec`.
-- **Lisans:** Gyan.dev bu statik Essentials derlemesini GPLv3 olarak tanımlar. Bu, genel FFmpeg varsayılan lisansından farklıdır: FFmpeg'in kendisi çoğunlukla LGPL olsa da `--enable-gpl` bileşenleri veya GPL codec kütüphaneleri birleşik FFmpeg ikilisini GPL kapsamına sokar.
-- **Proje/kaynak:** [Gyan.dev FFmpeg Builds](https://www.gyan.dev/ffmpeg/builds/), [FFmpeg kaynak commit'i 946fcce07b](https://github.com/FFmpeg/FFmpeg/commit/946fcce07b), [FFmpeg lisans açıklaması](https://ffmpeg.org/legal.html).
-- **Telif:** FFmpeg geliştiricileri; Windows build/dağıtımı Gyan Doshi tarafından sağlanır. Bileşen kaynaklarındaki telif bildirimleri geçerlidir.
-- **Tam metin:** [licenses/FFmpeg-GPLv3.txt](licenses/FFmpeg-GPLv3.txt), FFmpeg kaynak commit'inden kopyalanmıştır.
-- **Denetlenen derleme ayarları:** `--enable-gpl --enable-version3 --enable-static`; ayrıca `--enable-cairo`, `--enable-fontconfig`, `--enable-gnutls`, `--enable-gmp`, `--enable-libsrt`, `--enable-libssh`, `--enable-libzmq`, `--enable-libwebp`, `--enable-libx264`, `--enable-libx265`, `--enable-libxvid`, `--enable-libaom`, `--enable-libopenjpeg`, `--enable-libvpx`, `--enable-libass`, `--enable-libfreetype`, `--enable-libfribidi`, `--enable-libharfbuzz`, `--enable-libvidstab`, `--enable-libvmaf`, `--enable-libzimg`, `--enable-libgme`, `--enable-libopenmpt`, `--enable-libmp3lame`, `--enable-libtheora`, `--enable-libvo-amrwbenc`, `--enable-libgsm`, `--enable-libopencore-amrnb`, `--enable-libopus`, `--enable-libspeex`, `--enable-libvorbis` ve `--enable-librubberband`.
-- **Derleme telifleri:** `ffmpeg -version` çıktısı `Copyright (c) 2000-2026 the FFmpeg developers` ve Gyan.dev derlemesini doğruladı. Gyan Essentials, yukarıdaki statik kodlayıcı/kütüphanelerle tek bir GPLv3 FFmpeg ikilisi oluşturur. Bunların tam sürümleri ve lisansları binary fetch betiğinde kaydedilmemiştir; FFmpeg kaynak commit'i tek başına dış kitaplıkların karşılık gelen kaynaklarını veya Gyan yapılandırma betiklerini içerdiğini kanıtlamaz.
-- **GPL/source durumu ve öneri:** Kurulum paketinde bu GPLv3 statik ikiliği dağıtacaksak ikiliyle eşleşen FFmpeg ve dahil edilmiş bağımlılıkların karşılık gelen kaynak kodu, build/configure bilgisi ve ilgili lisans bildirimleri erişilebilir tutulmalıdır. Mevcut `fetch_binaries.py` bunları indirmiyor veya yayımlamıyor. Basit ve düşük yük getiren yol, `--enable-gpl` olmadan oluşturulmuş, yapılandırması ve lisansları doğrulanmış LGPL derlemesine geçmektir. Gyan sayfasındaki mevcut release Essentials derlemesi LGPL değildir. Nihai seçim ve kaynak sunumu YN-0 tarafından onaylanmalıdır; bu metin hukuki görüş değildir.
+- **Version:** `tools/fetch_binaries.py` downloads the Windows x64 LGPL shared FFmpeg `n9.0.2-12-gc867e13549` asset from BtbN release tag `autobuild-2026-09-27-13-04`. Archive SHA-256: `8ee8dcffde407fe78381b8d5888a0d19dca5e20fb26cdadba78c1bbc03043e30`.
+- **Included files:** `ffmpeg.exe`, `ffprobe.exe`, and the DLLs in the same release archive; `ffplay.exe` is omitted. The archive is 76,974,545 bytes and the extracted files total 156,943,360 bytes. The same-date LGPL static archive is 171,535,547 bytes, so the shared variant has the smaller installed footprint.
+- **License:** LGPL version 3 or later, shared build. `ffmpeg -version` reports `--enable-version3`; its configuration contains no `--enable-gpl`, and `ffmpeg -L` prints LGPL v3 terms.
+- **Project and source:** [Pinned BtbN release](https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-09-27-13-04), [BtbN build repository](https://github.com/BtbN/FFmpeg-Builds), [FFmpeg n9.0.2 source](https://github.com/FFmpeg/FFmpeg/tree/n9.0.2), and [FFmpeg license information](https://ffmpeg.org/legal.html).
+- **Copyright:** FFmpeg developers and BtbN Windows build contributors. Copyright and license notices for bundled DLL components remain applicable.
+- **Full license text:** [licenses/FFmpeg-LGPL-3.0.txt](licenses/FFmpeg-LGPL-3.0.txt), copied from FFmpeg n9.0.2's official `COPYING.LGPLv3` source file. The LGPL 2.1 text is included as well; the old GPL text does not describe this selected build.
 
+## Files included with the release
+
+The build copies this notice and the complete `licenses/` directory into the application folder. PyInstaller excludes Mutagen explicitly.
 ## Yayın paketine dahil edilecek bildirim dosyaları
 
 Dağıtım gerçekten yukarıdaki bileşenleri içeriyorsa `THIRD_PARTY_NOTICES.md` ile listelenen lisans tam metinlerini kurulum klasörüne kopyalayın. Özellikle FFmpeg yapılandırması ile Mutagen'in pakete girip girmediğini son PyInstaller çıktısında doğrulamadan yayına çıkmayın. CX-1'in build betiği şu anda lisans dosyalarını kurulum klasörüne kopyalamıyor.

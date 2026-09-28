@@ -57,6 +57,7 @@ version_info = VSVersionInfo(
 )
 
 datas = [(str(ROOT / "logo"), "logo"), (str(ROOT / "bin"), "bin")]
+datas += [(str(ROOT / "THIRD_PARTY_NOTICES.md"), "."), (str(ROOT / "licenses"), "licenses")]
 binaries = []
 hiddenimports = collect_submodules("yt_dlp")
 customtkinter_data, customtkinter_binaries, customtkinter_imports = collect_all("customtkinter")
@@ -73,7 +74,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter.test"],
+    excludes=["tkinter.test", "mutagen"],
     noarchive=False,
     optimize=0,
 )

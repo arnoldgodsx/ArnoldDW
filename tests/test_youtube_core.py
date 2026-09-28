@@ -54,6 +54,47 @@ def test_build_download_options(tmp_path):
     assert isinstance(opts["logger"], youtube.YtDlpLogger)
 
 
+def test_build_download_options_uses_discovered_runtime(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        youtube.binaries,
+        "ytdlp_runtime_options",
+        lambda: {"ffmpeg_location": "bin/ffmpeg.exe", "js_runtimes": {"deno": {"path": "bin/deno.exe"}}},
+    )
+
+    opts = youtube.build_download_options("MP4", "720p", str(tmp_path))
+
+    assert opts["ffmpeg_location"] == "bin/ffmpeg.exe"
+    assert opts["js_runtimes"] == {"deno": {"path": "bin/deno.exe"}}
+
+
+def test_fetch_preview_uses_discovered_runtime(monkeypatch):
+    runtime_options = {"js_runtimes": {"deno": {"path": "bin/deno.exe"}}}
+    monkeypatch.setattr(youtube.binaries, "ytdlp_runtime_options", lambda: runtime_options)
+    monkeypatch.setattr(youtube.http, "fetch_image", lambda *_args, **_kwargs: None)
+    seen = {}
+
+    class PreviewYDL:
+        def __init__(self, opts):
+            seen.update(opts)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_exc):
+            return False
+
+        def extract_info(self, _url, download):
+            assert download is False
+            return {"id": "video", "thumbnail": None}
+
+    monkeypatch.setattr(youtube.yt_dlp, "YoutubeDL", PreviewYDL)
+
+    preview = youtube.fetch_preview("https://youtube.com/watch?v=video")
+
+    assert preview.info["id"] == "video"
+    assert seen["js_runtimes"] == runtime_options["js_runtimes"]
+
+
 class FakeYDL:
     """Stands in for yt_dlp.YoutubeDL; `script(opts, ydl)` plays the hook sequence."""
 

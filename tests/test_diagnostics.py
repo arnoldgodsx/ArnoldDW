@@ -13,6 +13,23 @@ def test_sensitive_values_and_url_queries_are_redacted():
     assert "<redacted>" in scrubbed
 
 
+def test_cx3_instaloader_sample_and_ytdlp_private_arguments_are_redacted():
+    instaloader = (
+        r"Instaloader session file: C:\Users\alice\AppData\Local\Instaloader\session-creator_handle"
+    )
+    yt_dlp = (
+        r'yt-dlp --cookies "C:\Users\alice\AppData\Local\browser\cookies.txt" '
+        r"--cookies-from-browser chrome:Profile-Private https://example.test/video"
+    )
+    scrubbed_session = diagnostics._mask_text(instaloader, "alice")
+    scrubbed_args = diagnostics._mask_text(yt_dlp, "alice")
+    assert r"session-<redacted>" in scrubbed_session
+    assert "creator_handle" not in scrubbed_session
+    assert "cookies.txt" not in scrubbed_args
+    assert "Profile-Private" not in scrubbed_args
+    assert scrubbed_args.count("<redacted>") == 2
+
+
 def test_recent_logs_are_limited_to_five_megabytes(tmp_path):
     older = tmp_path / "older.log"
     newer = tmp_path / "newer.log"
