@@ -39,6 +39,10 @@ python app.py
 
 Mevcut giriş noktası `app.py`; paketler `arnold_dw/`, testler `tests/`, kullanıcı belgeleri `docs/`, tanıtım sitesi `site/` altındadır. Hedef mimaride uygulama `arnold_dw/core/` (indirme motoru ve platformlar) ile `arnold_dw/ui/` (ekranlar ve bileşenler) olarak ayrılır; derleme ve bağımlı dosya araçları `tools/` altında tutulur. Bu hedefin ayrıntıları ekip içi `hq/ROADMAP.md` dosyasındadır.
 
+## Üçüncü taraf lisansları
+
+Dağıtılan paketlerin lisans ve atıfları için [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) ile yanındaki `licenses/` tam metinlerine bakın.
+
 ## English
 
 Arnold DW is a Windows desktop app for downloading individual YouTube videos as MP4 or MP3 and selected Instagram posts, reels, carousels, and public profile content. TikTok is not currently supported. Download the Windows installer from [GitHub Releases](https://github.com/arnoldgodsx/ArnoldDW/releases/latest). Use the app only for content you own or are allowed to download.
