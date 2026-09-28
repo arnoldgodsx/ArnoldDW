@@ -11,9 +11,9 @@ Bu dosya [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) biçimini izle
 - Üçüncü taraf lisans bildirimleri ve tam lisans metinleri.
 
 ### Changed
+- Uygulama logosu, simgesi ve tüm platform/gezinme ikonları özgün çizimlerle değiştirildi; üçüncü taraf görsel varlık kalmadı.
 - Tanıtım sayfası 320–768 px yatay taşma kontrolü ve yeni ana ekran görüntüsü.
 - Site stil dosyası okunabilir biçime getirildi.
-- Site footer'ına Icons8 görsel atıf bağlantısı eklendi.
 
 ## [1.1] - 2026-07-29
 
