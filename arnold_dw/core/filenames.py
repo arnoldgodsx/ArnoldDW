@@ -22,8 +22,13 @@ def safe_filename_part(value, fallback="instagram"):
     return value or fallback
 
 
-def youtube_outtmpl(download_dir):
-    return os.path.join(download_dir, YOUTUBE_OUTTMPL)
+def youtube_outtmpl(download_dir, label=None):
+    """Output template; `label` (e.g. "720p", "192kbps") keeps each quality in its own file."""
+    if not label:
+        return os.path.join(download_dir, YOUTUBE_OUTTMPL)
+    label = safe_filename_part(label, fallback="").replace("%", "%%")
+    stem, ext = YOUTUBE_OUTTMPL.rsplit(".", 1)
+    return os.path.join(download_dir, f"{stem} {label}.{ext}")
 
 
 def instagram_post_basename(owner_username, shortcode, index):

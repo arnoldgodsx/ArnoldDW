@@ -24,6 +24,7 @@ SCHEMA_VERSION = 1
 @dataclass
 class Settings:
     download_dir: str = field(default_factory=paths.default_download_dir)
+    max_concurrent: int = 2  # downloads running at the same time (clamped by core.jobs)
 
     def to_dict(self):
         return {"schema": SCHEMA_VERSION, **dataclasses.asdict(self)}

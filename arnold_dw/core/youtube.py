@@ -12,6 +12,7 @@ import yt_dlp
 from arnold_dw import paths
 from arnold_dw.core import filenames, formats, http
 from arnold_dw.core.errors import DownloadCancelled
+from arnold_dw.core.progress import CombinedProgress
 
 log = logging.getLogger(__name__)
 
@@ -74,7 +75,7 @@ def build_download_options(fmt, quality, download_dir):
         "noplaylist": True,
         "noprogress": True,
         "windowsfilenames": True,
-        "outtmpl": filenames.youtube_outtmpl(download_dir),
+        "outtmpl": filenames.youtube_outtmpl(download_dir, formats.filename_label(fmt, quality)),
         "logger": YtDlpLogger(),
     }
     if os.path.isfile(paths.FFMPEG_PATH):
@@ -83,35 +84,54 @@ def build_download_options(fmt, quality, download_dir):
     return opts
 
 
+@dataclass(frozen=True)
+class DownloadResult:
+    path: str              # the finished .mp4 / .mp3
+    already_existed: bool  # True: the same file (same quality) was already there, nothing downloaded
+
+
+def final_path(ydl, info, fmt):
+    """Where the finished file of this (format-selected) download ends up."""
+    stem, _ext = os.path.splitext(ydl.prepare_filename(info))
+    return stem + formats.output_extension(fmt)
+
+
 def download(url, fmt, quality, download_dir, cancel_event,
              on_progress=None, on_processing=None):
     """Download `url` as MP4/MP3 into `download_dir`. Blocks until finished.
 
     on_progress(fraction | None, downloaded_bytes, speed_bps | None, eta_seconds | None)
-        while bytes arrive; fraction is None when the total size is unknown.
+        while bytes arrive, combined over all streams of the download (video +
+        audio), so it never jumps back; fraction is None while the size is unknown.
     on_processing() once, when post-processing (merge / MP3 conversion) begins -
         from then on the download can no longer be cancelled.
 
-    Raises DownloadCancelled if `cancel_event` gets set during the transfer
-    (partial files of this download are removed), or the yt-dlp error.
+    Returns a DownloadResult. If the target file already exists nothing is
+    downloaded (already_existed=True). Raises DownloadCancelled if
+    `cancel_event` gets set during the transfer (partial files of this
+    download are removed), or the yt-dlp error.
     """
     os.makedirs(download_dir, exist_ok=True)
     partial_paths = set()
     processing = False
+    combined = CombinedProgress()
 
     def progress_hook(d):
         if cancel_event.is_set():
             raise yt_dlp.utils.DownloadCancelled("Kullanıcı tarafından iptal edildi")
-        if d.get("status") != "downloading":
+        status = d.get("status")
+        if status not in ("downloading", "finished"):
             return
-        for key in ("tmpfilename", "filename"):
-            if d.get(key):
-                partial_paths.add(d[key])
-        if on_progress is not None:
-            total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
-            downloaded = d.get("downloaded_bytes") or 0
-            fraction = min(downloaded / total, 1.0) if total else None
-            on_progress(fraction, downloaded, d.get("speed"), d.get("eta"))
+        key = d.get("filename") or d.get("tmpfilename") or ""
+        if status == "downloading":
+            for name in ("tmpfilename", "filename"):
+                if d.get(name):
+                    partial_paths.add(d[name])
+        total = d.get("total_bytes") or d.get("total_bytes_estimate")
+        result = combined.update(key, d.get("downloaded_bytes"), total, d.get("speed"), d.get("eta"),
+                                 finished=status == "finished")
+        if on_progress is not None and status == "downloading":
+            on_progress(result.fraction, result.downloaded, result.speed, result.eta)
 
     def postprocessor_hook(d):
         nonlocal processing
@@ -127,14 +147,26 @@ def download(url, fmt, quality, download_dir, cancel_event,
     log.info("Download start: %s fmt=%s quality=%s dir=%s", url, fmt, quality, download_dir)
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([url])
+            info = ydl.extract_info(url, download=False)
+            if cancel_event.is_set():
+                raise DownloadCancelled()
+            path = final_path(ydl, info, fmt)
+            if os.path.exists(path):
+                log.info("Already downloaded: %s", path)
+                return DownloadResult(path, already_existed=True)
+            combined = CombinedProgress.for_info(info)
+            ydl.process_ie_result(info, download=True)
+    except DownloadCancelled:
+        log.info("Download cancelled: %s", url)
+        raise
     except Exception as exc:
         if cancel_event.is_set() and not processing:
             _remove_partial_files(partial_paths)
             log.info("Download cancelled: %s", url)
             raise DownloadCancelled() from exc
         raise
-    log.info("Download finished: %s", url)
+    log.info("Download finished: %s -> %s", url, path)
+    return DownloadResult(path, already_existed=False)
 
 
 def _remove_partial_files(paths_seen):

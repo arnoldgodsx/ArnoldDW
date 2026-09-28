@@ -36,6 +36,15 @@ def log_dir():
     return os.path.join(config_dir(), "logs")
 
 
+def history_path():
+    return os.path.join(config_dir(), "history.db")
+
+
+def thumbs_dir():
+    """Small cover images of downloads, referenced from the history."""
+    return os.path.join(config_dir(), "thumbs")
+
+
 def default_download_dir():
     return os.path.join(os.path.expanduser("~"), "Downloads", APP_NAME)
 

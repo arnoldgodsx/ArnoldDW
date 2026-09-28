@@ -61,3 +61,10 @@ def compose_spinner_frame(base_img, angle, diameter=SPINNER_DIAMETER, width=SPIN
     y = (frame.height - sprite.height) // 2
     frame.paste(sprite, (x, y), sprite)
     return frame
+
+
+def job_thumbnail(img, size=(256, 144)):
+    """Small copy of a cover for a download job (lists show it at 64x36; keeps memory low)."""
+    thumb = img.convert("RGB")
+    thumb.thumbnail(size, Image.LANCZOS)
+    return thumb

@@ -54,6 +54,27 @@ STAGE_POST = "post"                # index = n-th profile post, total None
 STAGE_REEL = "reel"                # index = n-th profile video, total None
 
 
+def progress_text(stage, index, total):
+    """User-facing (Turkish) text for an on_progress(stage, index, total) report."""
+    if stage == STAGE_POST_ITEM:
+        return f"{index}/{total} indiriliyor..."
+    if stage == STAGE_PROFILE_PIC:
+        return "Profil fotoğrafı indiriliyor..."
+    if stage == STAGE_POST:
+        return f"Gönderi {index} indiriliyor..."
+    if stage == STAGE_REEL:
+        return f"Reels/video {index} indiriliyor..."
+    return "İndiriliyor..."
+
+
+def post_url(shortcode):
+    return f"https://www.instagram.com/p/{shortcode}/"
+
+
+def profile_url(username):
+    return f"https://www.instagram.com/{username}/"
+
+
 def parse_input(value):
     """Classify user input: ("post", shortcode) or ("profile", username).
 
@@ -289,7 +310,15 @@ def download_media(item, folder, basename, cancel_event):
     return True
 
 
-def _download_post_items(post, folder, cancel_event, seen_shortcodes):
+def _fetch_file(item, folder, basename, cancel_event, on_file):
+    """download_media + report the final path. Returns 1 if a new file was written."""
+    created = download_media(item, folder, basename, cancel_event)
+    if on_file is not None:
+        on_file(filenames.media_path(folder, basename, item["is_video"]), created)
+    return 1 if created else 0
+
+
+def _download_post_items(post, folder, cancel_event, seen_shortcodes, on_file=None):
     if post.shortcode in seen_shortcodes:
         return 0
     seen_shortcodes.add(post.shortcode)
@@ -298,13 +327,16 @@ def _download_post_items(post, folder, cancel_event, seen_shortcodes):
         if not item["url"]:
             continue
         basename = filenames.instagram_post_basename(post.owner_username, post.shortcode, item["index"])
-        if download_media(item, folder, basename, cancel_event):
-            count += 1
+        count += _fetch_file(item, folder, basename, cancel_event, on_file)
     return count
 
 
-def download_post(post, items, folder, cancel_event, on_progress=None):
-    """Download the selected `items` (from post_media) of one post. Returns files written."""
+def download_post(post, items, folder, cancel_event, on_progress=None, on_file=None):
+    """Download the selected `items` (from post_media) of one post. Returns files written.
+
+    on_file(path, created) is called for every selected file: created=False
+    when it already existed and was left untouched.
+    """
     os.makedirs(folder, exist_ok=True)
     downloaded = 0
     for position, item in enumerate(items, start=1):
@@ -313,13 +345,12 @@ def download_post(post, items, folder, cancel_event, on_progress=None):
         if not item["url"]:
             continue
         basename = filenames.instagram_post_basename(post.owner_username, post.shortcode, item["index"])
-        if download_media(item, folder, basename, cancel_event):
-            downloaded += 1
+        downloaded += _fetch_file(item, folder, basename, cancel_event, on_file)
     return downloaded
 
 
-def download_profile(profile, categories, folder, cancel_event, on_progress=None):
-    """Download the chosen categories of a profile. Returns files written."""
+def download_profile(profile, categories, folder, cancel_event, on_progress=None, on_file=None):
+    """Download the chosen categories of a profile. Returns files written (see download_post)."""
     os.makedirs(folder, exist_ok=True)
     downloaded = 0
     seen_shortcodes = set()
@@ -331,9 +362,9 @@ def download_profile(profile, categories, folder, cancel_event, on_progress=None
     if CATEGORY_PROFILE_PIC in categories:
         report(STAGE_PROFILE_PIC)
         profile_item = {"is_video": False, "url": str(profile.profile_pic_url)}
-        if download_media(profile_item, folder,
-                          filenames.instagram_profile_pic_basename(profile.username), cancel_event):
-            downloaded += 1
+        downloaded += _fetch_file(profile_item, folder,
+                                  filenames.instagram_profile_pic_basename(profile.username),
+                                  cancel_event, on_file)
 
     if CATEGORY_POSTS in categories:
         for index, post in enumerate(profile.get_posts(), start=1):
@@ -342,7 +373,7 @@ def download_profile(profile, categories, folder, cancel_event, on_progress=None
             if post.is_video and post.typename != "GraphSidecar":
                 continue
             report(STAGE_POST, index)
-            downloaded += _download_post_items(post, folder, cancel_event, seen_shortcodes)
+            downloaded += _download_post_items(post, folder, cancel_event, seen_shortcodes, on_file)
 
     if CATEGORY_REELS in categories:
         video_index = 0
@@ -353,6 +384,6 @@ def download_profile(profile, categories, folder, cancel_event, on_progress=None
                 continue
             video_index += 1
             report(STAGE_REEL, video_index)
-            downloaded += _download_post_items(post, folder, cancel_event, seen_shortcodes)
+            downloaded += _download_post_items(post, folder, cancel_event, seen_shortcodes, on_file)
 
     return downloaded
