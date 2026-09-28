@@ -8,14 +8,14 @@ Arnold DW, YouTube ve Instagram içeriklerini Windows bilgisayarınıza indirmen
 
 ## Çalışan özellikler
 
-- **YouTube:** Tekil video için MP4 indirme ve kaynakta bulunan en yüksek çözünürlüğe kadar kalite seçimi; MP3 için 320, 192 veya 128 kbps bit hızı seçimi.
-- **Önizleme:** Video bağlantısı girildiğinde kapak, başlık, kanal ve süre bilgileri gösterilir.
-- **İptal:** Devam eden YouTube ve Instagram indirmeleri iptal edilebilir.
-- **Instagram gönderisi, reel veya carousel:** Gönderideki indirilebilir öğeleri önizleyip istediklerinizi seçebilirsiniz.
-- **Herkese açık Instagram profili:** Gönderiler/fotoğraflar, reels/videolar ve profil fotoğrafı kategorilerinden seçim yapabilirsiniz.
-- İndirme klasörü seçilebilir ve sonraki açılışlarda hatırlanır.
+- **YouTube:** Tekil video için MP4 (kaynakta bulunan en yüksek çözünürlüğe kadar, 4K dahil) veya MP3 (320/192/128 kbps). Varsayılan MP4 her oynatıcıda açılan H.264 + AAC'dir.
+- **Instagram:** Gönderi, reel ve carousel öğelerini önizleyip seçerek indirme. Herkese açık profillerde toplu indirme, isteğe bağlı "tarayıcı oturumumu kullan" seçeneğiyle.
+- **İndirme kuyruğu:** Linki yapıştırıp "İndir"e basın; indirme arka planda sürer, siz sıradaki linki yapıştırırsınız. Aynı anda en fazla 2 indirme; ilerleme alttaki şeritte ve **İndirmeler** sekmesinde.
+- **İndirmeler / geçmiş:** Aktif indirmeleri iptal etme; tamamlananları açma, klasörde gösterme, tekrar deneme. Geçmiş uygulama kapanıp açılınca korunur.
+- **Önizleme:** Kapak, başlık, kanal ve süre bilgisi.
+- **Ayarlar (⚙):** Kayıt klasörü, video modu, bilgi/kapak gömme, indirme motoru (yt-dlp) güncellemesi ve güncelleme kanalı, yardımcı araç durumu.
 
-TikTok şu an çalışmıyor; desteklenen bir özellik olarak sunulmaz.
+TikTok, X, Reddit ve diğer siteler için indirme motoru hazır, ancak arayüz ekranları henüz yok; bu yüzden uygulamada sunulmuyor.
 
 ## Kurulum
 

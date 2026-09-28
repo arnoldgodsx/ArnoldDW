@@ -8,15 +8,14 @@ Arnold DW is a Windows desktop app for downloading YouTube and Instagram content
 
 ## Working features
 
-- **YouTube:** Download an individual video as MP4, with quality options up to the highest resolution available from the source, or as MP3 at 320, 192, or 128 kbps.
-- **Preview:** When you enter a video link, the app shows its thumbnail, title, channel, and duration.
-- **Cancel:** You can cancel an active YouTube or Instagram download.
-- **Instagram post, reel, or carousel:** Preview downloadable items in a post and choose which ones to download.
-- **Public Instagram profile:** Choose posts/photos, reels/videos, and the profile picture categories.
-- **Download folder:** Choose a download folder; the app remembers it the next time it starts.
-- **Settings:** Choose the YouTube video mode, whether to embed metadata and cover art, and the yt-dlp update channel. Check for and install engine updates, and view the detected helper tools.
+- **YouTube:** Download a single video as MP4 (up to the highest resolution the source offers, including 4K) or MP3 (320/192/128 kbps). MP4 defaults to H.264 + AAC, which plays in every player.
+- **Instagram:** Preview and pick items from posts, reels and carousels. Bulk download from public profiles with an optional "use my browser session" setting.
+- **Download queue:** Paste a link and press Download; it runs in the background while you paste the next one. Up to 2 downloads at a time, with progress in the bottom strip and the **Downloads** tab.
+- **Downloads / history:** Cancel active downloads; open, show in folder or retry finished ones. History survives restarts.
+- **Preview:** Thumbnail, title, channel and duration.
+- **Settings (⚙):** Download folder, video mode, metadata/cover embedding, yt-dlp engine updates and update channel, helper tool status.
 
-TikTok is not currently supported and is not presented as a working feature.
+Download engines for TikTok, X, Reddit and other sites are built, but their screens are not yet, so the app does not offer them.
 
 ## Installation
 
