@@ -1,7 +1,5 @@
-customtkinter
-yt-dlp
-pillow
-requests
-imageio-ffmpeg
-instaloader
-pyinstaller
+customtkinter>=5.2.2
+yt-dlp>=2024.12.23
+pillow>=10.0.0
+requests>=2.31.0
+instaloader>=4.13.0
