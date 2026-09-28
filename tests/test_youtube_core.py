@@ -38,12 +38,19 @@ def test_is_youtube_url_rejects(url):
     assert not youtube.is_youtube_url(url)
 
 
+@pytest.fixture(autouse=True)
+def _isolated_appdata(tmp_path, monkeypatch):
+    # download() reads the saved settings; never touch the real user profile.
+    monkeypatch.setenv("APPDATA", str(tmp_path / "appdata"))
+
+
 def test_build_download_options(tmp_path):
     opts = youtube.build_download_options("MP3", "320 kbps", str(tmp_path))
     assert opts["noplaylist"] is True
     assert opts["windowsfilenames"] is True
     assert opts["outtmpl"] == os.path.join(str(tmp_path), "%(title).150B [%(id)s].%(ext)s")
-    assert opts["postprocessors"][0]["preferredquality"] == "320"
+    extract = [pp for pp in opts["postprocessors"] if pp["key"] == "FFmpegExtractAudio"]
+    assert extract[0]["preferredquality"] == "320"
     assert isinstance(opts["logger"], youtube.YtDlpLogger)
 
 

@@ -10,6 +10,7 @@ from arnold_dw import APP_NAME, paths
 from arnold_dw.config import load_settings, save_settings
 from arnold_dw.ui.screens.home import HomeScreen
 from arnold_dw.ui.screens.instagram import InstagramScreen
+from arnold_dw.ui.screens.settings import SettingsScreen
 from arnold_dw.ui.screens.youtube import YouTubeScreen
 from arnold_dw.ui.theme import APP_HEIGHT, APP_WIDTH, BG, SCREEN_PADX, SCREEN_PADY
 
@@ -21,6 +22,7 @@ SCREENS = {
     "home": HomeScreen,
     "youtube": YouTubeScreen,
     "instagram": InstagramScreen,
+    "settings": SettingsScreen,
 }
 
 POLL_INTERVAL_MS = 60
