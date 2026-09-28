@@ -188,7 +188,8 @@ def test_remove_and_clear_finished(manager, runner, events):
     assert manager.remove(ids[0]) is False  # still running
     runner.release(ids[0])
     runner.release(ids[1])
-    wait_for(lambda: status(manager, ids[1]) == jobs.DONE)
+    # Both were released; wait for both - under load the first may finish after the second.
+    wait_for(lambda: status(manager, ids[0]) == jobs.DONE and status(manager, ids[1]) == jobs.DONE)
     assert manager.remove(ids[0]) is True
     assert manager.get(ids[0]) is None
     wait_for(lambda: status(manager, ids[2]) == jobs.RUNNING)
