@@ -1,5 +1,8 @@
 customtkinter>=5.2.2
-yt-dlp>=2024.12.23
+# Bundled engine is pinned to the tested release; the in-app updater
+# (arnold_dw.core.runtime.ytdlp_updater) keeps it current at runtime.
+yt-dlp==2026.8.19
+yt-dlp-ejs==0.8.0
 pillow>=10.0.0
 requests>=2.31.0
 instaloader>=4.13.0
