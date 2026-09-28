@@ -56,7 +56,7 @@ Name: "{autoprograms}\Arnold DW"; Filename: "{app}\Arnold DW.exe"
 Name: "{autodesktop}\Arnold DW"; Filename: "{app}\Arnold DW.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\Arnold DW.exe"; Description: "{cm:LaunchDescription}"; Flags: postinstall nowait skipifsilent
+Filename: "{app}\Arnold DW.exe"; Description: "{cm:LaunchDescription}"; Flags: postinstall nowait
 
 [Code]
 var

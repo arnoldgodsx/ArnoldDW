@@ -31,3 +31,65 @@ jobs:
 
       - name: Test
         run: python -m pytest
+
+  package-smoke:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38 # v5.6.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Resolve ffmpeg cache key
+        id: ffmpeg
+        shell: pwsh
+        run: |
+          $content = Get-Content -Raw tools/fetch_binaries.py
+          $match = [regex]::Match($content, '"binary_sha256":\s*"([a-f0-9]{64})"')
+          if (-not $match.Success) { throw "Could not read pinned ffmpeg SHA-256" }
+          "hash=$($match.Groups[1].Value)" >> $env:GITHUB_OUTPUT
+
+      - name: Cache verified ffmpeg
+        uses: actions/cache@0c45773b623bea8c8e75f6c82b208c3cf94ea4f9 # v4.2.2
+        with:
+          path: bin/ffmpeg.exe
+          key: ffmpeg-${{ steps.ffmpeg.outputs.hash }}
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt pyinstaller
+
+      - name: Fetch pinned runtime binaries
+        run: python tools/fetch_binaries.py
+
+      - name: Build onedir package
+        run: python -m PyInstaller --noconfirm --distpath dist --workpath build packaging/ArnoldDW.spec
+
+      - name: Check executable version and startup
+        shell: pwsh
+        run: |
+          $exe = Join-Path $PWD "dist/Arnold DW/Arnold DW.exe"
+          if (-not (Test-Path -LiteralPath $exe)) { throw "PyInstaller executable was not created" }
+          $version = Start-Process -FilePath $exe -ArgumentList "--version" -Wait -PassThru
+          if ($version.ExitCode -ne 0) { throw "--version exited with code $($version.ExitCode)" }
+          $app = Start-Process -FilePath $exe -PassThru
+          Start-Sleep -Seconds 8
+          $app.Refresh()
+          if ($app.HasExited) { throw "Application exited before the 8-second startup check" }
+          Stop-Process -Id $app.Id -Force
+
+      - name: Create portable artifact
+        shell: pwsh
+        run: Compress-Archive -Path "dist/Arnold DW/*" -DestinationPath dist/ArnoldDW-main-win64.zip -CompressionLevel Optimal
+
+      - name: Upload portable artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ArnoldDW-main-win64
+          path: dist/ArnoldDW-main-win64.zip
+          retention-days: 7
