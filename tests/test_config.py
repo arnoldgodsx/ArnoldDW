@@ -69,6 +69,7 @@ def test_save_writes_schema_and_round_trips(cfg):
         data = json.load(f)
     assert data["schema"] == SCHEMA_VERSION
     assert data["download_dir"] == "D:\\Medya"
+    assert data["max_concurrent"] == 2
     assert load_settings(cfg).download_dir == "D:\\Medya"
 
 

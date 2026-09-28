@@ -1,14 +1,14 @@
-"""YouTube screen: paste a link -> preview -> MP4/MP3 + quality -> download."""
+"""YouTube screen: paste a link -> preview -> MP4/MP3 + quality -> queue the download."""
 
 import logging
-import threading
 
 import customtkinter as ctk
 
-from arnold_dw.core import formats, youtube
-from arnold_dw.core.errors import DownloadCancelled, friendly_error
-from arnold_dw.core.text import fmt_bytes, fmt_duration, fmt_eta, fmt_speed
-from arnold_dw.ui.imaging import compose_spinner_frame, dim_image, make_rounded, spinner_sprite
+from arnold_dw.core import formats, runners, youtube
+from arnold_dw.core.errors import friendly_error
+from arnold_dw.core.jobs import DownloadJob
+from arnold_dw.core.text import fmt_duration
+from arnold_dw.ui.imaging import job_thumbnail, make_rounded, spinner_sprite
 from arnold_dw.ui.screens.base import Screen
 from arnold_dw.ui.theme import (
     ACCENT,
@@ -22,7 +22,6 @@ from arnold_dw.ui.theme import (
     SPINNER_STEP,
     SUCCESS,
     SURFACE,
-    SURFACE_2,
     SURFACE_3,
     TEXT,
     TEXT_FAINT,
@@ -30,15 +29,16 @@ from arnold_dw.ui.theme import (
 )
 from arnold_dw.ui.widgets.dropdown import ThemedDropdown
 from arnold_dw.ui.widgets.inputs import InputRow, SaveLocation
+from arnold_dw.ui.widgets.jobviews import JobStrip
 
 log = logging.getLogger(__name__)
 
 PREVIEW_DEBOUNCE_MS = 550
-FINISH_DELAY_MS = 1800
 
 
 class YouTubeScreen(Screen):
     name = "youtube"
+    tab = "home"
 
     def __init__(self, app):
         super().__init__(app)
@@ -54,17 +54,7 @@ class YouTubeScreen(Screen):
         self._preview_spin_angle = 0
         self._spinner_images = {}
 
-        self._processing_active = False
-        self._processing_job = None
-        self._processing_angle = 0
-        self._processing_tick_count = 0
-        self._processing_dots = 0
-        self._processing_base_img = None
-        self._processing_images = {}
-
-        self._progress_indeterminate = False
-        self._is_downloading = False
-        self.cancel_event = None
+        self._job_thumb = None  # small PIL cover handed to the queued job
 
     # ------------------------------------------------------------------
     # Construction
@@ -75,20 +65,10 @@ class YouTubeScreen(Screen):
         self._build_preview()
         self._build_options()
         self.save_location = SaveLocation(self, self.app)
-        self.save_location.pack(fill="x", pady=(0, 18))
+        self.save_location.pack(fill="x", pady=(0, 12))
         self._build_download_button()
-        self._build_progress()
-
-        self._prepare_progress_layout()
-
-    def _prepare_progress_layout(self):
-        # Measure the progress widgets once without changing the fixed 1:1.5
-        # application window, then hide them until a download starts.
-        self.progress_frame.pack(fill="x", pady=(0, 6))
-        self._show_progress_info_row()
-        self.update_idletasks()
-        self.progress_info_row.pack_forget()
-        self.progress_frame.pack_forget()
+        self.strip = JobStrip(self, self.app)
+        self.strip.refresh()
 
     def _build_url_section(self):
         self.input_row = InputRow(
@@ -111,9 +91,9 @@ class YouTubeScreen(Screen):
         self.preview_card = ctk.CTkFrame(
             self, fg_color=SURFACE, corner_radius=10,
             border_width=1, border_color=BORDER,
-            height=PREVIEW_H + 84, width=PREVIEW_W + 16,
+            height=PREVIEW_H + 78, width=PREVIEW_W + 16,
         )
-        self.preview_card.pack(fill="x", pady=(0, 14))
+        self.preview_card.pack(fill="x", pady=(0, 10))
         self.preview_card.pack_propagate(False)
 
         # Empty state
@@ -145,7 +125,7 @@ class YouTubeScreen(Screen):
 
         self.title_label = ctk.CTkLabel(
             self.filled_state, text="", text_color=TEXT,
-            font=(FONT_FAMILY, 14, "bold"), wraplength=PREVIEW_W,
+            font=(FONT_FAMILY, 14, "bold"), wraplength=PREVIEW_W + 60,
             justify="left", anchor="w",
         )
         self.title_label.pack(fill="x", padx=16)
@@ -158,7 +138,7 @@ class YouTubeScreen(Screen):
 
     def _build_options(self):
         row = ctk.CTkFrame(self, fg_color="transparent")
-        row.pack(fill="x", pady=(0, 14))
+        row.pack(fill="x", pady=(0, 10))
         # `uniform` locks both columns to the same width always, so swapping
         # MP4 <-> MP3 (which changes the label text length) can never make one
         # side shrink to make room for the other - that was the source of the
@@ -208,76 +188,21 @@ class YouTubeScreen(Screen):
     def _build_download_button(self):
         self.download_btn = ctk.CTkButton(
             self, text="İndir", command=self._on_download_btn_clicked,
-            height=50, corner_radius=12, state="disabled",
+            height=46, corner_radius=12, state="disabled",
             fg_color=SURFACE_3, hover_color=ACCENT_HOVER,
             text_color=TEXT, text_color_disabled=TEXT_FAINT,
             font=(FONT_FAMILY, 15, "bold"),
         )
-        self.download_btn.pack(fill="x", pady=(0, 14))
-
-    def _build_progress(self):
-        self.progress_frame = ctk.CTkFrame(self, fg_color="transparent")
-
-        self.progress_bar = ctk.CTkProgressBar(
-            self.progress_frame, height=8, corner_radius=6,
-            fg_color=SURFACE_2, progress_color=ACCENT,
-        )
-        self.progress_bar.pack(fill="x")
-        self.progress_bar.set(0)
-
-        # Shown while actively downloading: percent (left) / speed (center) /
-        # remaining time (right). Swapped out for progress_label below during
-        # every other phase (starting, processing, done, cancelled, error).
-        self.progress_info_row = ctk.CTkFrame(self.progress_frame, fg_color="transparent")
-        self.progress_info_row.grid_columnconfigure(0, weight=1, uniform="prog")
-        self.progress_info_row.grid_columnconfigure(1, weight=1, uniform="prog")
-        self.progress_info_row.grid_columnconfigure(2, weight=1, uniform="prog")
-
-        self.progress_percent_label = ctk.CTkLabel(
-            self.progress_info_row, text="", text_color=TEXT_MUTED,
-            font=(FONT_FAMILY, 12), anchor="w",
-        )
-        self.progress_percent_label.grid(row=0, column=0, sticky="ew")
-
-        self.progress_speed_label = ctk.CTkLabel(
-            self.progress_info_row, text="", text_color=TEXT_MUTED,
-            font=(FONT_FAMILY, 12), anchor="center",
-        )
-        self.progress_speed_label.grid(row=0, column=1, sticky="ew")
-
-        self.progress_eta_label = ctk.CTkLabel(
-            self.progress_info_row, text="", text_color=TEXT_MUTED,
-            font=(FONT_FAMILY, 12), anchor="e",
-        )
-        self.progress_eta_label.grid(row=0, column=2, sticky="ew")
-
-        self.progress_label = ctk.CTkLabel(
-            self.progress_frame, text="", text_color=TEXT_MUTED,
-            font=(FONT_FAMILY, 12), anchor="w",
-        )
+        self.download_btn.pack(fill="x", pady=(0, 8))
 
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
 
-    def is_busy(self):
-        return self._is_downloading or self._processing_active
-
-    def shutdown(self):
-        if self.cancel_event is not None:
-            self.cancel_event.set()
-        return super().shutdown()
-
-    def destroy(self):
-        # CTkProgressBar's indeterminate loop runs on its own `after` timer.
-        progress_bar = getattr(self, "progress_bar", None)
-        if progress_bar is not None:
-            progress_bar.stop()
-        super().destroy()
+    def on_job_event(self, kind, payload):
+        self.strip.refresh()
 
     def _go_home(self):
-        if self.is_busy():
-            return
         self.app.show_screen("home")
 
     # ------------------------------------------------------------------
@@ -303,29 +228,6 @@ class YouTubeScreen(Screen):
             selected_color=ACCENT if enabled else SURFACE_3,
             selected_hover_color=ACCENT_HOVER if enabled else SURFACE_3,
         )
-
-    def _show_progress_info_row(self):
-        self.progress_label.pack_forget()
-        if not self.progress_info_row.winfo_ismapped():
-            self.progress_info_row.pack(fill="x", pady=(6, 0))
-
-    def _show_progress_message(self, text, color=TEXT_MUTED):
-        self.progress_info_row.pack_forget()
-        self.progress_label.configure(text=text, text_color=color)
-        if not self.progress_label.winfo_ismapped():
-            self.progress_label.pack(fill="x", pady=(6, 0))
-
-    def _set_progress_indeterminate(self, indeterminate):
-        """Bouncing bar while the download size is unknown; a real fraction otherwise."""
-        if indeterminate == self._progress_indeterminate:
-            return
-        self._progress_indeterminate = indeterminate
-        if indeterminate:
-            self.progress_bar.configure(mode="indeterminate")
-            self.progress_bar.start()
-        else:
-            self.progress_bar.stop()
-            self.progress_bar.configure(mode="determinate")
 
     def _show_filled_preview(self):
         self._stop_preview_spinner()
@@ -406,16 +308,18 @@ class YouTubeScreen(Screen):
         # Worker thread: network + PIL work only, results go through post().
         try:
             preview = youtube.fetch_preview(url)
-            rounded = None
+            rounded = job_thumb = None
             if preview.thumbnail is not None:
                 rounded = make_rounded(preview.thumbnail, (PREVIEW_W, PREVIEW_H), radius=32)
-            self.post("preview_ok", rid, preview, rounded)
+                job_thumb = job_thumbnail(preview.thumbnail)
+            self.post("preview_ok", rid, preview, rounded, job_thumb)
         except Exception as exc:
             log.warning("YouTube preview failed for %s", url, exc_info=True)
             self.post("preview_err", rid, friendly_error(exc))
 
-    def on_preview_ok(self, rid, preview, rounded_thumb):
+    def on_preview_ok(self, rid, preview, rounded_thumb, job_thumb):
         if rid == self.request_id and preview.url == self.url_entry.get().strip():
+            self._job_thumb = job_thumb
             self._apply_preview(preview.url, preview.info, rounded_thumb)
 
     def on_preview_err(self, rid, err):
@@ -468,7 +372,7 @@ class YouTubeScreen(Screen):
         self.current_url = None
         self.thumb_ctk_image = None
         self._thumb_pil_image = None
-        self._stop_processing_animation()
+        self._job_thumb = None
         self._show_empty_preview()
         self._set_cta_enabled(self.download_btn, False, text="İndir")
         self.quality_menu.configure(state="disabled")
@@ -519,165 +423,26 @@ class YouTubeScreen(Screen):
             self.quality_var.set(formats.pick_default_quality(max_h))
 
     # ------------------------------------------------------------------
-    # Processing (post-download) animation
-    # ------------------------------------------------------------------
-
-    def _start_processing_animation(self):
-        self._set_progress_indeterminate(False)
-        self._processing_active = True
-        self._processing_angle = 0
-        self._processing_tick_count = 0
-        self._processing_dots = 0
-        self._processing_images = {}
-        self._processing_base_img = (
-            dim_image(self._thumb_pil_image) if self._thumb_pil_image is not None else None
-        )
-        self.progress_bar.configure(mode="indeterminate")
-        self.progress_bar.start()
-        self._tick_processing()
-
-    def _tick_processing(self):
-        if not self._processing_active:
-            return
-
-        self._processing_tick_count += 1
-        if self._processing_tick_count % 4 == 0:
-            self._processing_dots = (self._processing_dots + 1) % 4
-            self.progress_label.configure(text="İşleniyor" + "." * self._processing_dots)
-
-        if self._processing_base_img is not None:
-            angle = self._processing_angle
-            image = self._processing_images.get(angle)
-            if image is None:
-                frame = compose_spinner_frame(self._processing_base_img, angle)
-                image = self._processing_images[angle] = ctk.CTkImage(frame, size=(PREVIEW_W, PREVIEW_H))
-            self.thumb_label.configure(image=image)
-            self._processing_angle = (angle + SPINNER_STEP) % 360
-
-        self._processing_job = self.schedule(SPINNER_INTERVAL, self._tick_processing)
-
-    def _stop_processing_animation(self):
-        self._processing_active = False
-        self._processing_job = self.cancel_job(self._processing_job)
-        self.progress_bar.stop()
-        self.progress_bar.configure(mode="determinate")
-        self._progress_indeterminate = False
-        self._processing_base_img = None
-        self._processing_images = {}
-        if self.thumb_ctk_image is not None:
-            self.thumb_label.configure(image=self.thumb_ctk_image)
-
-    # ------------------------------------------------------------------
-    # Download
+    # Download (queued in the app's DownloadManager)
     # ------------------------------------------------------------------
 
     def _on_download_btn_clicked(self):
-        if self._is_downloading:
-            self._cancel_download()
-        else:
-            self._start_download()
-
-    def _start_download(self):
         if not self.current_info or not self.current_url:
             return
-
-        self._is_downloading = True
-        self.cancel_event = threading.Event()
-
-        self.download_btn.configure(
-            state="normal", fg_color=SURFACE_2, hover_color=SURFACE_3, text="İptal Et",
-        )
-        self.input_row.set_locked(True)
-        self._set_format_seg_enabled(False)
-        self.quality_menu.configure(state="disabled")
-        self.save_location.set_enabled(False)
-
-        self.progress_bar.set(0)
-        self.progress_frame.pack(fill="x", pady=(0, 6))
-        self._show_progress_message("İndirme başlatılıyor...")
-
-        self.start_worker(
-            self._download_worker,
-            self.current_url, self.format_var.get(), self.quality_var.get(),
-            self.app.download_dir, self.cancel_event,
-            track=True,
-        )
-
-    def _cancel_download(self):
-        if self.cancel_event is not None:
-            self.cancel_event.set()
-        self.download_btn.configure(state="disabled", fg_color=SURFACE_3, text="İptal ediliyor...")
-
-    def _download_worker(self, url, fmt, quality, download_dir, cancel_event):
-        try:
-            youtube.download(
-                url, fmt, quality, download_dir, cancel_event,
-                on_progress=lambda *progress: self.post("progress", *progress),
-                on_processing=lambda: self.post("processing"),
-            )
-            self.post("done")
-        except DownloadCancelled:
-            self.post("cancelled")
-        except Exception as exc:
-            log.exception("YouTube download failed: %s (%s %s)", url, fmt, quality)
-            self.post("download_err", friendly_error(exc))
-
-    def on_progress(self, fraction, downloaded, speed, eta):
-        if self._processing_active:
+        fmt, quality = self.format_var.get(), self.quality_var.get()
+        options = runners.youtube_options(fmt, quality)
+        manager = self.app.downloads
+        if manager.find_active(runners.PLATFORM_YOUTUBE, self.current_url, options) is not None:
+            self._set_status("Bu video bu ayarlarla zaten indiriliyor.", TEXT_MUTED)
             return
-        self._show_progress_info_row()
-        if fraction is None:
-            self._set_progress_indeterminate(True)
-            self.progress_percent_label.configure(text=fmt_bytes(downloaded))
-        else:
-            self._set_progress_indeterminate(False)
-            self.progress_bar.set(min(max(fraction, 0), 1))
-            self.progress_percent_label.configure(text=f"%{fraction * 100:.0f}")
-        self.progress_speed_label.configure(text=fmt_speed(speed))
-        self.progress_eta_label.configure(text=f"Kalan: {fmt_eta(eta)}" if eta else "")
-
-    def on_processing(self):
-        self._is_downloading = False
-        self.download_btn.configure(state="disabled", fg_color=SURFACE_3, text="İşleniyor...")
-        self._show_progress_message("İşleniyor")
-        self._start_processing_animation()
-
-    def on_done(self):
-        self._is_downloading = False
-        self._stop_processing_animation()
-        self.progress_bar.set(1)
-        self._show_progress_message("Tamamlandı", SUCCESS)
-        self.schedule(FINISH_DELAY_MS, self._finish_download_ui)
-
-    def on_cancelled(self):
-        self._is_downloading = False
-        self._stop_processing_animation()
-        self.progress_bar.set(0)
-        self._show_progress_message("İndirme iptal edildi")
-        self._restore_inputs()
-
-    def on_download_err(self, err):
-        self._is_downloading = False
-        self._stop_processing_animation()
-        self.progress_bar.set(0)
-        self._show_progress_message(err, ERROR)
-        self._restore_inputs()
-
-    def _finish_download_ui(self):
-        self._restore_inputs()
-        self.progress_frame.pack_forget()
-        self.progress_bar.set(0)
-        self.format_var.set(formats.FORMAT_MP4)
-        self._on_format_changed(formats.FORMAT_MP4)
+        title = self.current_info.get("title") or self.current_url
+        manager.enqueue(DownloadJob(
+            platform=runners.PLATFORM_YOUTUBE, url=self.current_url, title=title,
+            download_dir=self.app.download_dir, options=options, thumbnail_image=self._job_thumb,
+        ))
+        log.info("YouTube download queued: %s (%s %s)", self.current_url, fmt, quality)
+        # Ready for the next link right away; the format choice stays for the next video.
         self._reset_preview(clear_url=True)
-
-    def _restore_inputs(self):
-        has_preview = self.current_info is not None
-        self._is_downloading = False
-        self.cancel_event = None
-        self._set_cta_enabled(self.download_btn, has_preview, text="İndir")
-        self.input_row.set_locked(False)
-        self._set_format_seg_enabled(has_preview)
-        self.quality_menu.configure(state="normal" if has_preview else "disabled")
-        self.save_location.set_enabled(True)
-        self._update_clear_btn_visibility()
+        self._set_status(f"İndirmelere eklendi ({fmt} · {quality}). Yeni bir bağlantı yapıştırabilirsiniz.",
+                         SUCCESS)
+        self.url_entry.focus_set()

@@ -501,7 +501,8 @@ class SettingsScreen(Screen):
         log.info("restart requested from settings")
         restart.request()
         # The window's normal close path: stops running work, then main() relaunches.
-        self.app._on_close()
+        # Running downloads were already confirmed above, so don't ask again.
+        self.app._on_close(force=True)
 
     # --- about --------------------------------------------------------------
 

@@ -108,7 +108,7 @@ def test_download_reports_engine_failures(tmp_path, monkeypatch):
         def __exit__(self, *exc):
             return False
 
-        def download(self, urls):
+        def extract_info(self, url, download=True):  # the first engine call of a download
             raise ImportError("engine is broken")
 
     monkeypatch.setattr(youtube.yt_dlp, "YoutubeDL", BrokenYDL)

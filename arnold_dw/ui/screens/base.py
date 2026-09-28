@@ -18,10 +18,16 @@ class Screen(AfterJobsMixin, ctk.CTkFrame):
     Leaving the screen destroys it, which cancels every job started with
     schedule(). Worker threads talk back only through post(); the window
     delivers a message to `on_<kind>(*args)` on the UI thread, and only while
-    this screen instance is still the one on display.
+    this screen instance is still the one on display (or is persistent).
+
+    A `persistent` screen is built once and only hidden when left; it gets
+    on_show()/on_hide() instead of being rebuilt. `tab` names the navigation
+    bar tab highlighted while the screen is shown (None: its own name).
     """
 
     name = ""
+    tab = None
+    persistent = False
 
     def __init__(self, app):
         super().__init__(app, fg_color=BG)
@@ -55,6 +61,15 @@ class Screen(AfterJobsMixin, ctk.CTkFrame):
         return thread
 
     # --- lifecycle hooks ----------------------------------------------------
+
+    def on_show(self):
+        """The screen was put on display (every time, after build() for new screens)."""
+
+    def on_hide(self):
+        """A persistent screen was hidden."""
+
+    def on_job_event(self, kind, payload):
+        """A DownloadManager event (see core.jobs), delivered on the UI thread."""
 
     def is_busy(self):
         """True while leaving the screen would abandon running work."""

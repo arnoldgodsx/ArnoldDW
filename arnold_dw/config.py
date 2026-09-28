@@ -39,6 +39,7 @@ class Settings:
     engine_channel: str = _choice("stable", ENGINE_CHANNELS)
     engine_auto_check: bool = True
     last_engine_check: float = 0.0  # time.time() of the last successful engine update check
+    max_concurrent: int = 2  # downloads running at the same time (clamped by core.jobs)
 
     def to_dict(self):
         return {"schema": SCHEMA_VERSION, **dataclasses.asdict(self)}
