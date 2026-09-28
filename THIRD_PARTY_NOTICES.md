@@ -107,11 +107,11 @@ Arnold DW'nin Windows derlemesi Python uygulama dosyalarına ek olarak aşağıd
 
 ### Icons8 görseli
 
-- **Sürüm/aralık:** Uygulama `logo/icons8-fire-48.png` ve `logo/icons8-fire-96.png` dosyalarını, site ise 96 px logonun kopyasını ve baseline ekran görüntüsünü kullanır. İndirme kaydı/sürümü repoda yoktur.
-- **Lisans:** Icons8'in ücretsiz varlık kullanım koşulları; masaüstü uygulamalarında About bölümünde Icons8 bağlantısı istenir. Site footer'ına Icons8 atıf bağlantısı eklendi. Uygulama kodunda bu görev kapsamındaki izinli dosyalar arasında About alanı yoktur.
+- **Kullanım:** Uygulamanın pencere/görev çubuğu simgesi ve site logosu artık depodaki özgün Arnold DW markasıdır; eski `icons8-fire-*.png` dosyaları uygulamadan kaldırılmıştır. Bu bölüm, AG-1'in T18 çalışması tamamlanana kadar uygulamada kalan platform ikonları için tutulur. Site footer'ındaki Icons8 atıf bağlantısı da bu ikon atfı olarak korunur.
+- **Lisans:** Icons8'in ücretsiz varlık kullanım koşulları masaüstü uygulamalarında About bölümünde Icons8 bağlantısı ister. Site footer'ındaki korunan atıf bu uygulama koşulunu tek başına karşılamaz; uygulamada About alanı bulunmuyor ve T18 platform ikonları çalışması tamamlanana kadar bu durum açık kalıyor.
 - **Proje/koşullar:** [Icons8 lisans koşulları](https://icons8.com/license).
-- **Telif:** İndirilen ikonun sayfası ve eser sahibi depoda kayıtlı değildir; ilgili asset sayfasındaki atıf esas alınmalıdır. Diğer `logo/*.png` platform simgelerinin kaynağı da depoda belirtilmemiştir ve ayrıca doğrulanmalıdır.
-- **Tam metin:** Bu bir yazılım lisansı değil, çevrimiçi kullanım koşullarıdır; [Icons8 lisans sayfası](https://icons8.com/license) esas alınır. Site footer'ında atıf bağlantısı yer alır. Uygulamanın About alanı bu görevde düzenlenemedi; AG-1 özgün logo çalışması yayıma alınırken uygulama simgesini ve site logosunu da Icons8 varlığından çıkarın ya da masaüstü uygulamasında gereken atfı sağlayın.
+- **Telif:** Kalan platform ikonlarının (YouTube/Instagram/TikTok/geri) indirme kaydı, asset sayfası ve eser sahibi depoda kayıtlı değildir; ilgili asset sayfasındaki atıf esas alınmalıdır. AG-1'in yeniden çizimleri main'e alındığında bu kullanım ve atıf yeniden incelenmelidir.
+- **Tam metin:** Bu bir yazılım lisansı değil, çevrimiçi kullanım koşullarıdır; [Icons8 lisans sayfası](https://icons8.com/license) esas alınır. Site footer'ındaki bağlantı korunmuştur ve artık logo atfı olarak etiketlenmez. Platform ikonlarının kaynağı/değişimi tamamlandığında bildirim ve site atfı yeniden gözden geçirilmelidir.
 
 ## Derleme araçları ve ikili dosyalar
 
