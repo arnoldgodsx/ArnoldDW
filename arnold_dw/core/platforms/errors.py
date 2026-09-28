@@ -21,6 +21,7 @@ class ErrorCode(StrEnum):
     AGE_RESTRICTED = "age_restricted"
     GEO_BLOCKED = "geo_blocked"
     RATE_LIMITED = "rate_limited"
+    FORBIDDEN = "forbidden"
     NO_MEDIA = "no_media"
     TIMEOUT = "timeout"
     NETWORK = "network"
@@ -42,6 +43,7 @@ MESSAGES: dict[ErrorCode, str] = {
     ErrorCode.AGE_RESTRICTED: "Bu içerik yaş sınırlaması nedeniyle indirilemiyor.",
     ErrorCode.GEO_BLOCKED: "Bu içerik bulunduğunuz bölgede erişilemiyor.",
     ErrorCode.RATE_LIMITED: "Site çok fazla istek algıladı. Biraz bekleyip tekrar deneyin.",
+    ErrorCode.FORBIDDEN: "Site bu içeriğe erişimi reddetti. Biraz sonra tekrar deneyin.",
     ErrorCode.NO_MEDIA: "Bu bağlantıda indirilebilir bir medya bulunamadı.",
     ErrorCode.TIMEOUT: "Bağlantı zaman aşımına uğradı. Tekrar deneyin.",
     ErrorCode.NETWORK: "İnternet bağlantısı sorunu tespit edildi.",
@@ -75,7 +77,7 @@ _RULES: tuple[tuple[ErrorCode, tuple[str, ...]], ...] = (
     (ErrorCode.AGE_RESTRICTED, ("age-restricted", "age restricted", "confirm your age", "inappropriate for some users")),
     (ErrorCode.PRIVATE, ("private video", "this video is private", "is private", "private post",
                          "private account", "permission to view this post")),
-    (ErrorCode.GEO_BLOCKED, ("not available in your country", "geo restrict", "geo-restrict",
+    (ErrorCode.GEO_BLOCKED, ("available in your country", "geo restrict", "geo-restrict",
                              "ip address is blocked", "not available in your region", "blocked it in your country")),
     (ErrorCode.RATE_LIMITED, ("http error 429", "too many requests", "rate limit", "ratelimit")),
     (ErrorCode.LOGIN_REQUIRED, ("sign in", "login required", "log in", "logged-in", "requiring login",
@@ -85,6 +87,7 @@ _RULES: tuple[tuple[ErrorCode, tuple[str, ...]], ...] = (
                           "no media found", "does not contain any video")),
     (ErrorCode.NOT_FOUND, ("http error 404", "video unavailable", "not found", "has been removed", "does not exist",
                            "no longer available", "is unavailable", "video not available", "deleted")),
+    (ErrorCode.FORBIDDEN, ("http error 403", "403 forbidden", "403 client error")),
     (ErrorCode.DISK_FULL, ("no space left", "errno 28", "winerror 112", "not enough space")),
     (ErrorCode.PERMISSION, ("permission denied", "winerror 5", "errno 13", "access is denied")),
     (ErrorCode.PATH_MISSING, ("no such file or directory", "cannot find the path", "winerror 3")),
@@ -118,4 +121,12 @@ def to_platform_error(exc: BaseException) -> PlatformError:
         if exc.errno in by_errno:
             return PlatformError(by_errno[exc.errno], str(exc))
     detail = f"{exc.__class__.__name__}: {exc}"
+    status = getattr(getattr(exc, "response", None), "status_code", None)
+    if isinstance(status, int):
+        by_status = {403: ErrorCode.FORBIDDEN, 404: ErrorCode.NOT_FOUND, 410: ErrorCode.NOT_FOUND,
+                     429: ErrorCode.RATE_LIMITED}
+        if status in by_status:
+            return PlatformError(by_status[status], detail)
+        if status >= 500:
+            return PlatformError(ErrorCode.NETWORK, detail)
     return PlatformError(classify_message(str(exc)), detail)
