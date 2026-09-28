@@ -15,7 +15,7 @@ def resource_path(*parts):
 
 
 ICON_PATH = resource_path("logo", "icon.ico")
-APP_LOGO_PATH = resource_path("logo", "icons8-fire-96.png")
+APP_LOGO_PATH = resource_path("logo", "app-logo.png")
 YOUTUBE_LOGO_PATH = resource_path("logo", "youtube.png")
 INSTAGRAM_LOGO_PATH = resource_path("logo", "instagram.png")
 TIKTOK_LOGO_PATH = resource_path("logo", "tiktok.png")
