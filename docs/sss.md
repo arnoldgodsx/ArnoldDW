@@ -6,7 +6,7 @@ MP4 indirmede uygulama mümkün olduğunda AAC ses akışını tercih edip video
 
 ## YouTube hatası — motoru güncelle
 
-YouTube tarafındaki değişiklikler indirme motorunun bağlantıyı çözümlemesini etkileyebilir. Uygulamayı kapatıp geliştirici kurulumunda bağımlılıkları `pip install -r requirements.txt` ile güncelleyin ve yeniden deneyin. Kullanıcı olarak kurulu sürümde hata sürerse [GitHub Issues](https://github.com/arnoldgodsx/ArnoldDW/issues) sayfasına uygulama sürümü ve hata adımlarıyla bildirim bırakın. Parola, çerez veya özel bağlantı paylaşmayın.
+YouTube tarafındaki değişiklikler indirme motorunun bağlantıyı çözümlemesini etkileyebilir. Ana ekrandaki dişli düğmesinden **Ayarlar**'ı açıp **İndirme motoru** bölümünde **Güncellemeleri denetle**'yi seçin. Yeni yt-dlp sürümü bulunursa **İndir ve kur**'u seçip kurulumdan sonra uygulamayı yeniden başlatın. Erken düzeltmeler için **Nightly** kanalını seçebilirsiniz; sorun çıkarsa uygulama önceki motora dönebilir. Hata sürerse [GitHub Issues](https://github.com/arnoldgodsx/ArnoldDW/issues) sayfasına uygulama sürümü ve hata adımlarıyla bildirim bırakın. Parola, çerez veya özel bağlantı paylaşmayın.
 
 ## Instagram çok fazla istek bildiriyor
 
@@ -27,3 +27,15 @@ YouTube ekranında **Gözat** ile mevcut bir klasör seçin. Uygulama seçimi ha
 ## TikTok neden açılmıyor?
 
 TikTok indirme özelliği şu an çalışmıyor ve uygulama tarafından desteklenmiyor.
+
+## Video kalitesi, kapak veya bilgi gömme seçeneklerini nereden değiştiririm?
+
+Ana ekrandaki dişli düğmesiyle **Ayarlar** ekranını açın. **İndirme** bölümünde **Maksimum uyumluluk (H.264)** veya **En yüksek kalite** modunu seçebilir, bilgi ve kapak görseli gömmeyi açıp kapatabilirsiniz. Bu seçenekler ffmpeg gerektirir; MP4'e kapak eklemek için ffprobe da gerekir. Gerekli araç yoksa Ayarlar ekranı bunu bildirir.
+
+## YouTube indirme motorunu nasıl güncellerim?
+
+Ana ekrandaki dişli düğmesiyle **Ayarlar** ekranını açıp **İndirme motoru** bölümünde **Güncellemeleri denetle**'yi seçin. Sürüm bulunursa **İndir ve kur** ile onaylayın. İsterseniz **Nightly** kanalında erken düzeltmeleri alabilirsiniz. Kurulum tamamlanınca uygulamayı yeniden başlatıp yeni motoru etkinleştirin. Günlük otomatik denetim yalnızca haber verir; kurulum yine onay ister.
+
+## English
+
+See the [English FAQ and troubleshooting guide](en/faq.md).
