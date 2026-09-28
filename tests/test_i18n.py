@@ -68,14 +68,14 @@ def test_checker_catalog_consistency_and_phase_three_report():
         [sys.executable, "tools/i18n_check.py", "--catalog-only"],
         cwd=root,
         capture_output=True,
-        text=True,
+        encoding="utf-8",
         check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "keys and placeholders match" in result.stdout
 
     report = subprocess.run(
-        [sys.executable, "tools/i18n_check.py"], cwd=root, capture_output=True, text=True, check=False
+        [sys.executable, "tools/i18n_check.py"], cwd=root, capture_output=True, encoding="utf-8", check=False
     )
     assert report.returncode == 0, report.stdout + report.stderr
     assert "UI literals to migrate" in report.stdout

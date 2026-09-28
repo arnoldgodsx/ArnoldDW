@@ -7,6 +7,7 @@ import ast
 import json
 import re
 import string
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -88,6 +89,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--strict", action="store_true", help="exit nonzero if catalogs or UI literals need work")
     parser.add_argument("--catalog-only", action="store_true", help="check catalogs without listing UI literals")
     args = parser.parse_args(argv)
+    # The report quotes Turkish UI strings; a cp1252 console (e.g. the CI runner) cannot
+    # encode them, so print UTF-8 regardless of the console code page.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
     issues = catalog_issues()
     if issues:
