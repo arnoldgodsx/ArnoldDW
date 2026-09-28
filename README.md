@@ -1,43 +1,44 @@
 # Arnold DW
 
-YouTube video ve ses indirme masaüstü uygulaması. Python + [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) ile yazıldı, [yt-dlp](https://github.com/yt-dlp/yt-dlp) kullanır, [PyInstaller](https://pyinstaller.org/) ile tek klasörlük bir Windows uygulaması olarak paketlenir.
+Arnold DW, YouTube ve Instagram içeriklerini Windows bilgisayarınıza indirmenizi sağlayan masaüstü uygulamasıdır. Bağlantıyı yapıştırın, önizlemeyi görün ve indirme seçeneklerini belirleyin.
 
-## Özellikler
+![Arnold DW ana ekranı](docs/images/baseline-home.png)
 
-- Link yapıştırınca otomatik önizleme (kapak, başlık, kanal, süre)
-- MP4 (video) veya MP3 (ses) olarak indirme
-- Video kalitesi, kaynağın gerçekte sunduğu çözünürlüklerle sınırlı (örn. video 1080p ise 4K/1440p seçeneği çıkmaz)
-- MP3 için bit hızı seçimi (320 / 192 / 128 kbps)
-- İndirme konumu seçilebilir, bir sonraki açılışta hatırlanır
-- İndirme sırasında ilerleme yüzdesi, hız ve kalan süre; indirme iptal edilebilir
-- Video sesi her zaman AAC olarak birleştirilir (bazı oynatıcıların Opus sesi çalmadığı sorunun önüne geçmek için)
+## Çalışan özellikler
+
+- **YouTube:** Tekil video için MP4 indirme ve kaynakta bulunan en yüksek çözünürlüğe kadar kalite seçimi; MP3 için 320, 192 veya 128 kbps bit hızı seçimi.
+- **Önizleme:** Video bağlantısı girildiğinde kapak, başlık, kanal ve süre bilgileri gösterilir.
+- **İptal:** Devam eden YouTube ve Instagram indirmeleri iptal edilebilir.
+- **Instagram gönderisi, reel veya carousel:** Gönderideki indirilebilir öğeleri önizleyip istediklerinizi seçebilirsiniz.
+- **Herkese açık Instagram profili:** Gönderiler/fotoğraflar, reels/videolar ve profil fotoğrafı kategorilerinden seçim yapabilirsiniz.
+- İndirme klasörü seçilebilir ve sonraki açılışlarda hatırlanır.
+
+TikTok şu an çalışmıyor; desteklenen bir özellik olarak sunulmaz.
 
 ## Kurulum
 
-```bash
-git clone git@github.com:merdogdux/ArnoldDW.git
+Windows kurulum dosyasını [GitHub Releases](https://github.com/arnoldgodsx/ArnoldDW/releases/latest) sayfasından indirin. `setup.exe` dosyasını çalıştırıp kurulum adımlarını izleyin.
+
+## Geliştirici kurulumu
+
+Python kurulu bir Windows ortamında:
+
+```powershell
+git clone https://github.com/arnoldgodsx/ArnoldDW.git
 cd ArnoldDW
-python -m venv venv
-venv\Scripts\activate
+python -m venv .venv
+.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-```
-
-`bin/ffmpeg.exe` depoya dahil edilmiştir; ayrıca bir ffmpeg kurulumu gerekmez.
-
-## Çalıştırma
-
-```bash
+python tools/fetch_binaries.py
 python app.py
 ```
 
-## .exe olarak derleme
+`fetch_binaries.py`, derleme için gerekli ikili dosyaları indirir. Uygulamayı paketlemek için PowerShell'de `tools/build.ps1` betiğini çalıştırın.
 
-```bash
-pyinstaller "Arnold DW.spec" --noconfirm
-```
+## Proje yapısı
 
-Çıktı `dist/Arnold DW/Arnold DW.exe` olarak oluşur.
+Mevcut giriş noktası `app.py`; paketler `arnold_dw/`, testler `tests/`, kullanıcı belgeleri `docs/`, tanıtım sitesi `site/` altındadır. Hedef mimaride uygulama `arnold_dw/core/` (indirme motoru ve platformlar) ile `arnold_dw/ui/` (ekranlar ve bileşenler) olarak ayrılır; derleme ve bağımlı dosya araçları `tools/` altında tutulur. Bu hedefin ayrıntıları ekip içi `hq/ROADMAP.md` dosyasındadır.
 
-## Kullanılan teknolojiler
+## English
 
-Python, CustomTkinter, yt-dlp, Pillow, requests, PyInstaller, ffmpeg.
+Arnold DW is a Windows desktop app for downloading individual YouTube videos as MP4 or MP3 and selected Instagram posts, reels, carousels, and public profile content. TikTok is not currently supported. Download the Windows installer from [GitHub Releases](https://github.com/arnoldgodsx/ArnoldDW/releases/latest). Use the app only for content you own or are allowed to download.
