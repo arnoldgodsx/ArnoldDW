@@ -149,6 +149,7 @@ def test_cancel_during_processing_is_not_reported_as_cancelled(tmp_path, fake_yd
 
 
 @pytest.mark.network
+@pytest.mark.smoke
 def test_real_preview_me_at_the_zoo():
     preview = youtube.fetch_preview("https://www.youtube.com/watch?v=jNQXAC9IVRw")
     assert preview.info["id"] == "jNQXAC9IVRw"
