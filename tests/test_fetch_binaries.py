@@ -17,6 +17,54 @@ def test_sha256_file_reads_binary_contents(tmp_path):
     assert sha256_file(path) == hashlib.sha256(b"verified binary").hexdigest()
 
 
+class FakeResponse:
+    def __init__(self, data, url):
+        self.data = data
+        self.url = url
+        self.offset = 0
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def read(self, size=-1):
+        if size < 0:
+            size = len(self.data) - self.offset
+        result = self.data[self.offset:self.offset + size]
+        self.offset += len(result)
+        return result
+
+
+def test_download_stream_enforces_archive_cap_and_checks_final_url(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        fetch_binaries.urllib.request, "urlopen",
+        lambda *_args, **_kwargs: FakeResponse(b"x" * 5, "https://release-assets.githubusercontent.com/archive.zip"),
+    )
+    destination = tmp_path / "archive.zip"
+    with pytest.raises(ValueError, match="exceeds"):
+        fetch_binaries.download("https://github.com/archive.zip", destination, 4)
+    assert destination.stat().st_size <= 4
+
+
+def test_download_rejects_non_https_or_unapproved_source(tmp_path):
+    with pytest.raises(ValueError, match="must use HTTPS"):
+        fetch_binaries.download("http://github.com/archive.zip", tmp_path / "http.zip", 100)
+    with pytest.raises(ValueError, match="allowed host"):
+        fetch_binaries.download("https://evil.test/archive.zip", tmp_path / "evil.zip", 100)
+
+
+@pytest.mark.parametrize("final_url", ["http://github.com/archive.zip", "https://evil.test/archive.zip"])
+def test_download_rejects_unsafe_final_url(tmp_path, monkeypatch, final_url):
+    monkeypatch.setattr(
+        fetch_binaries.urllib.request, "urlopen",
+        lambda *_args, **_kwargs: FakeResponse(b"archive", final_url),
+    )
+    with pytest.raises(ValueError, match="redirect"):
+        fetch_binaries.download("https://github.com/archive.zip", tmp_path / "archive.zip", 100)
+
+
 def test_safe_member_selects_expected_executable(tmp_path):
     path = tmp_path / "runtime.zip"
     with zipfile.ZipFile(path, "w") as archive:
@@ -75,6 +123,7 @@ def test_fetch_tool_extracts_ffmpeg_pair_and_shared_libraries(tmp_path, monkeypa
         {
             "version": "9.0",
             "url": "https://example.invalid/ffmpeg.zip",
+            "max_archive_bytes": 100_000,
             "archive_sha256": archive_hash,
             "archive_member": "bin/ffmpeg.exe",
             "destination_dir": "bin",
@@ -92,7 +141,7 @@ def test_fetch_tool_extracts_ffmpeg_pair_and_shared_libraries(tmp_path, monkeypa
         },
     )
 
-    def fake_download(_url, destination):
+    def fake_download(_url, destination, _max_bytes):
         shutil.copyfile(archive_path, destination)
 
     monkeypatch.setattr(fetch_binaries, "download", fake_download)

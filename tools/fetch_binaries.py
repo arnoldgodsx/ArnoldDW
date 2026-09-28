@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path, PurePosixPath
@@ -22,6 +23,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         "version": "9.0.2-12-gc867e13549 (LGPL shared, autobuild-2026-09-27-13-04)",
         "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-27-13-04/ffmpeg-n9.0.2-12-gc867e13549-win64-lgpl-shared-9.0.zip",
         "archive_sha256": "8ee8dcffde407fe78381b8d5888a0d19dca5e20fb26cdadba78c1bbc03043e30",
+        "max_archive_bytes": 120_000_000,
         "archive_member": "bin/ffmpeg.exe",
         "destination_dir": "bin",
         "include_bin_files": True,
@@ -45,6 +47,7 @@ TOOLS: dict[str, dict[str, Any]] = {
         "version": "2.9.7",
         "url": "https://github.com/denoland/deno/releases/download/v2.9.7/deno-x86_64-pc-windows-msvc.zip",
         "archive_sha256": "a0c3101b4158d1dfb7d6a78a7bf0f3de80c96bb423c152beec8beb22786f2238",
+        "max_archive_bytes": 60_000_000,
         "archive_member": "deno.exe",
         "destination_dir": "bin",
         "destination_name": "deno.exe",
@@ -56,6 +59,7 @@ TOOLS: dict[str, dict[str, Any]] = {
     },
 }
 CHUNK_SIZE = 1024 * 1024
+ALLOWED_DOWNLOAD_HOSTS = frozenset({"github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"})
 
 
 def sha256_file(path: Path) -> str:
@@ -66,10 +70,27 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def download(url: str, destination: Path) -> None:
+def download(url: str, destination: Path, max_bytes: int) -> None:
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme.lower() != "https" or parsed.hostname is None or parsed.hostname.lower() not in ALLOWED_DOWNLOAD_HOSTS:
+        raise ValueError("Binary archive URL must use HTTPS on an allowed host")
+    if max_bytes <= 0:
+        raise ValueError("Binary archive size limit must be positive")
     request = urllib.request.Request(url, headers={"User-Agent": "ArnoldDW-build/1.0"})
     with urllib.request.urlopen(request, timeout=60) as response, destination.open("wb") as output:
-        shutil.copyfileobj(response, output, length=CHUNK_SIZE)
+        final_url = getattr(response, "url", None) or response.geturl()
+        final = urllib.parse.urlparse(final_url)
+        if final.scheme.lower() != "https" or final.hostname is None or final.hostname.lower() not in ALLOWED_DOWNLOAD_HOSTS:
+            raise ValueError("Binary archive redirect must end at HTTPS on an allowed host")
+        total = 0
+        while True:
+            chunk = response.read(CHUNK_SIZE)
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > max_bytes:
+                raise ValueError(f"Binary archive exceeds the {max_bytes}-byte limit")
+            output.write(chunk)
 
 
 def safe_member(archive: zipfile.ZipFile, expected_suffix: str) -> zipfile.ZipInfo:
@@ -109,7 +130,7 @@ def fetch_tool(name: str, force: bool = False) -> Path:
         temporary = Path(temporary_dir)
         archive_path = temporary / "download.zip"
         print(f"Downloading {name} {tool['version']} from {tool['url']}")
-        download(tool["url"], archive_path)
+        download(tool["url"], archive_path, tool["max_archive_bytes"])
         archive_hash = sha256_file(archive_path)
         if archive_hash != tool["archive_sha256"]:
             raise ValueError(f"{name} archive SHA-256 mismatch: {archive_hash}")
