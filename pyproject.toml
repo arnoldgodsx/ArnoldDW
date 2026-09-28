@@ -1,8 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "arnold-dw"
 dynamic = ["version"]
-description = "Arnold DW - desktop media downloader (YouTube, Instagram, TikTok and more)"
+description = "Arnold DW desktop media downloader"
+readme = "README.md"
 requires-python = ">=3.11"
+dependencies = [
+    "customtkinter>=5.2.2",
+    "yt-dlp>=2024.12.23",
+    "pillow>=10.0.0",
+    "requests>=2.31.0",
+    "instaloader>=4.13.0",
+]
+
+[tool.setuptools.dynamic]
+version = {attr = "arnold_dw.__version__"}
+
+[tool.setuptools.packages.find]
+include = ["arnold_dw*"]
 
 [tool.ruff]
 line-length = 110
@@ -12,6 +30,9 @@ extend-exclude = ["build", "dist", ".venv"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "B", "I", "UP"]
 ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"app.py" = ["I001", "UP015", "B905"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
