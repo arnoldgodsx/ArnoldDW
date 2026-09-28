@@ -65,7 +65,7 @@ def wheel_entry(project, version, data, *, sha256=None, size=None, yanked=False)
     return {
         "filename": filename,
         "packagetype": "bdist_wheel",
-        "url": f"https://files.example/{filename}",
+        "url": f"https://files.pythonhosted.org/{filename}",
         "digests": {"sha256": sha256 or hashlib.sha256(data).hexdigest()},
         "size": len(data) if size is None else size,
         "yanked": yanked,
@@ -73,10 +73,11 @@ def wheel_entry(project, version, data, *, sha256=None, size=None, yanked=False)
 
 
 class FakeResponse:
-    def __init__(self, payload=None, content=None, status=200):
+    def __init__(self, payload=None, content=None, status=200, url=None):
         self._payload = payload
         self.content = content
         self.status_code = status
+        self.url = url
 
     def raise_for_status(self):
         if self.status_code >= 400:
@@ -103,6 +104,7 @@ class FakePyPI:
         self.json = {}
         self.files = {}
         self.requests = []
+        self.redirects = {}  # requested url -> response.url actually served (simulates a redirect)
 
     def add_release(self, version, *, latest=True, requires_python=">=3.10", ejs="0.8.0",
                     wheel=None, entry_overrides=None):
@@ -113,7 +115,7 @@ class FakePyPI:
         release = {
             "info": {"version": version, "requires_python": requires_python, "requires_dist": requires},
             "urls": [entry, {"filename": f"yt_dlp-{version}.tar.gz", "packagetype": "sdist",
-                             "url": "https://files.example/sdist", "digests": {"sha256": "0"}}],
+                             "url": "https://files.pythonhosted.org/sdist", "digests": {"sha256": "0"}}],
         }
         self.json[f"https://pypi.org/pypi/yt-dlp/{version}/json"] = release
         project = self.json.setdefault("https://pypi.org/pypi/yt-dlp/json", {"info": {}, "releases": {}, "urls": []})
@@ -131,11 +133,12 @@ class FakePyPI:
 
     def get(self, url, timeout=None, stream=False):
         self.requests.append(url)
+        final_url = self.redirects.get(url, url)
         if url in self.json:
-            return FakeResponse(payload=self.json[url])
+            return FakeResponse(payload=self.json[url], url=final_url)
         if url in self.files:
-            return FakeResponse(content=self.files[url])
-        return FakeResponse(status=404)
+            return FakeResponse(content=self.files[url], url=final_url)
+        return FakeResponse(status=404, url=final_url)
 
 
 @pytest.fixture
@@ -326,6 +329,35 @@ def test_cancel_during_download(manager, pypi):
     assert not [n for n in os.listdir(manager.root) if n.startswith(".staging")]
 
 
+def test_download_rejects_http_redirect(manager, pypi):
+    pypi.add_release("2026.9.1")
+    info = manager.check_for_update()
+    pypi.redirects[info.wheel.url] = info.wheel.url.replace("https://", "http://")
+    with pytest.raises(up.UpdateError) as err:
+        manager.download_and_install(info)
+    assert "güvenilmeyen" in err.value.user_message
+    assert manager.installed_versions() == []
+
+
+def test_download_rejects_untrusted_host_redirect(manager, pypi):
+    pypi.add_release("2026.9.1")
+    info = manager.check_for_update()
+    pypi.redirects[info.wheel.url] = "https://evil.example/payload.whl"
+    with pytest.raises(up.UpdateError) as err:
+        manager.download_and_install(info)
+    assert "güvenilmeyen" in err.value.user_message
+    assert manager.installed_versions() == []
+
+
+def test_metadata_rejects_untrusted_redirect(manager, pypi):
+    pypi.add_release("2026.9.1")
+    project_url = "https://pypi.org/pypi/yt-dlp/json"
+    pypi.redirects[project_url] = "http://pypi.org/pypi/yt-dlp/json"
+    assert manager.check_for_update() is None  # network/parse errors are swallowed by default
+    with pytest.raises(up.UpdateError):
+        manager.check_for_update(raise_errors=True)
+
+
 def test_download_network_error_is_wrapped(manager, pypi):
     pypi.add_release("2026.9.1")
     info = manager.check_for_update()
@@ -367,6 +399,22 @@ def test_prune_never_deletes_engine_in_use(manager, pypi):
         pypi.add_release(version)
         manager.download_and_install(manager.check_for_update())
     assert set(manager.installed_versions()) == {"2026.9.9", "2026.9.5", "2026.9.1"}
+
+
+def test_installed_versions_excludes_manifest_version_mismatch(manager):
+    version_dir = os.path.join(manager.root, "2026.9.1")
+    os.makedirs(version_dir)
+    with open(os.path.join(version_dir, up.MANIFEST_FILE), "w", encoding="utf-8") as fh:
+        json.dump({"version": "2026.9.9"}, fh)  # folder says 2026.9.1, manifest claims another
+    assert manager.installed_versions() == []
+
+
+def test_installed_versions_excludes_manifest_without_version_field(manager):
+    version_dir = os.path.join(manager.root, "2026.9.1")
+    os.makedirs(version_dir)
+    with open(os.path.join(version_dir, up.MANIFEST_FILE), "w", encoding="utf-8") as fh:
+        json.dump({}, fh)
+    assert manager.installed_versions() == []
 
 
 def test_corrupt_state_file_is_tolerated(manager, pypi):
@@ -473,6 +521,17 @@ def test_activate_skips_missing_active_directory(manager, pypi):
     out = run_activate(manager.root)
     assert out["source"] == "bundled"
     assert state_of(manager)["active"] is None
+
+
+def test_activate_ignores_tampered_manifest(manager, pypi):
+    install(manager, pypi, "2026.9.1")
+    manifest_path = os.path.join(manager.root, "2026.9.1", up.MANIFEST_FILE)
+    manifest = json.load(open(manifest_path, encoding="utf-8"))
+    manifest["version"] = "2026.9.9"  # folder still says 2026.9.1: local tampering / half install
+    with open(manifest_path, "w", encoding="utf-8") as fh:
+        json.dump(manifest, fh)
+    out = run_activate(manager.root)
+    assert out["source"] == "bundled"
 
 
 def test_mark_active_broken(manager, pypi):

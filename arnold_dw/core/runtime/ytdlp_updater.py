@@ -40,6 +40,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.parse
 import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -55,6 +56,9 @@ EJS_PROJECT = "yt-dlp-ejs"
 PACKAGES = ("yt_dlp", "yt_dlp_ejs")
 PYPI_PROJECT_URL = "https://pypi.org/pypi/{project}/json"
 PYPI_RELEASE_URL = "https://pypi.org/pypi/{project}/{version}/json"
+# Hosts a metadata/wheel response is trusted to end on, after redirects. A compromised CDN
+# edge or on-path attacker downgrading a redirect to plain HTTP must not be followed.
+ALLOWED_RESPONSE_HOSTS = frozenset({"pypi.org", "files.pythonhosted.org"})
 STATE_FILE = "state.json"
 MANIFEST_FILE = "engine.json"
 STATE_SCHEMA = 1
@@ -245,16 +249,31 @@ class EngineManager:
         return float(value) if isinstance(value, (int, float)) else None
 
     def installed_versions(self) -> list[str]:
-        """Complete engine directories, newest first."""
+        """Complete engine directories, newest first.
+
+        A directory only counts as installed when its own ``engine.json`` agrees that it is
+        the version its name claims - a mismatch (partial install interrupted mid-rename,
+        local tampering) is never activated, never offered as a rollback target, and gets
+        swept up by the next :meth:`_prune`.
+        """
         try:
             names = os.listdir(self.root)
         except OSError:
             return []
         versions = [
             n for n in names
-            if not n.startswith(".") and parse_version(n) and os.path.isfile(self._manifest_path(n))
+            if not n.startswith(".") and parse_version(n) and same_version(self._manifest_version(n), n)
         ]
         return sorted(versions, key=parse_version, reverse=True)
+
+    def _manifest_version(self, version: str) -> str | None:
+        try:
+            with open(self._manifest_path(version), encoding="utf-8") as fh:
+                manifest = json.load(fh)
+        except (OSError, ValueError):
+            return None
+        value = manifest.get("version") if isinstance(manifest, dict) else None
+        return value if isinstance(value, str) else None
 
     # -- state ----------------------------------------------------------------
 
@@ -421,6 +440,7 @@ class EngineManager:
     def _get_json(self, url: str) -> dict:
         response = self._http().get(url, timeout=TIMEOUT)
         response.raise_for_status()
+        _verify_response_origin(response.url)
         data = response.json()
         if not isinstance(data, dict):
             raise ValueError(f"unexpected JSON from {url}")
@@ -599,6 +619,7 @@ class EngineManager:
         size = 0
         with self._http().get(dist.url, stream=True, timeout=TIMEOUT) as response:
             response.raise_for_status()
+            _verify_response_origin(response.url)
             with open(path, "wb") as fh:
                 for chunk in response.iter_content(CHUNK_SIZE):
                     _check_cancel(cancel_event)
@@ -682,6 +703,22 @@ class EngineManager:
             if os.path.isdir(path):
                 log.info("removing old yt-dlp engine %s", name)
                 shutil.rmtree(path, ignore_errors=True)
+
+
+def _verify_response_origin(final_url: str) -> None:
+    """Reject a response that a redirect carried off HTTPS or onto an untrusted host.
+
+    ``requests`` follows redirects by default without re-checking scheme/host; an on-path
+    attacker or a compromised CDN edge could otherwise downgrade an HTTPS request to plain
+    HTTP mid-chain, letting a MITM swap the PyPI metadata or wheel bytes en route even though
+    the original request was HTTPS.
+    """
+    host = (urllib.parse.urlsplit(final_url).hostname or "").lower()
+    if urllib.parse.urlsplit(final_url).scheme != "https" or host not in ALLOWED_RESPONSE_HOSTS:
+        raise UpdateError(
+            f"refusing response from untrusted URL after redirect: {final_url}",
+            "Motor güncellemesi güvenilmeyen bir adrese yönlendirildi; işlem durduruldu.",
+        )
 
 
 def _check_cancel(cancel_event) -> None:

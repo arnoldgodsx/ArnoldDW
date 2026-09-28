@@ -42,7 +42,7 @@ def test_preview_uses_discovered_runtime_by_default(monkeypatch):
 def test_compat_mp4_uses_h264_selector_and_runtime(tmp_path):
     prefs = DownloadPrefs("compat", embed_metadata=False, embed_thumbnail=False)
     opts = youtube.build_download_options("MP4", "720p", str(tmp_path), prefs, RUNTIME)
-    assert opts["format"] == selectors.video_selector(720, "compat")
+    assert opts["format"] == selectors.video_selector("compat")
     assert opts["merge_output_format"] == "mp4"
     assert opts["ffmpeg_location"] == RUNTIME["ffmpeg_location"]
     assert opts["js_runtimes"] == RUNTIME["js_runtimes"]
@@ -52,12 +52,12 @@ def test_compat_mp4_uses_h264_selector_and_runtime(tmp_path):
 def test_quality_mode_and_unknown_quality_label(tmp_path):
     prefs = DownloadPrefs("quality", False, False)
     opts = youtube.build_download_options("MP4", "bogus", str(tmp_path), prefs, RUNTIME)
-    assert opts["format"] == selectors.video_selector(1080, "quality")
+    assert opts["format"] == selectors.video_selector("quality")
 
 
 def test_invalid_mode_falls_back_to_compat(tmp_path):
     opts = youtube.build_download_options("MP4", "480p", str(tmp_path), DownloadPrefs("??", False, False), RUNTIME)
-    assert opts["format"] == selectors.video_selector(480, "compat")
+    assert opts["format"] == selectors.video_selector("compat")
 
 
 def test_mp4_embeds_follow_prefs(tmp_path, monkeypatch):
@@ -86,7 +86,7 @@ def test_saved_settings_are_used_when_no_prefs_given(tmp_path, appdata):
         json.dump({"schema": 1, "video_mode": "quality", "embed_metadata": False, "embed_thumbnail": False}, f)
     assert youtube.current_prefs() == DownloadPrefs("quality", False, False)
     opts = youtube.build_download_options("MP4", "1440p", str(tmp_path), runtime=RUNTIME)
-    assert opts["format"] == selectors.video_selector(1440, "quality")
+    assert opts["format"] == selectors.video_selector("quality")
     assert keys(opts) == []
 
 
