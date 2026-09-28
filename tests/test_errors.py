@@ -40,6 +40,9 @@ def test_friendly_error(message, expected):
      "Instagram geçici olarak çok fazla istek algıladı. Biraz sonra deneyin."),
     ("Please wait a few minutes before you try again.",
      "Instagram geçici olarak çok fazla istek algıladı. Biraz sonra deneyin."),
+    ('JSON Query to graphql/query: 401 Unauthorized - "fail" status, message "Please wait a few '
+     'minutes before you try again." when accessing https://www.instagram.com/graphql/query',
+     "Instagram geçici olarak çok fazla istek algıladı. Biraz sonra deneyin."),
     ("Connection aborted", "Instagram bağlantısı kurulamadı. İnternet bağlantınızı kontrol edin."),
     ("Read timeout", "Instagram bağlantısı kurulamadı. İnternet bağlantınızı kontrol edin."),
     ("Invalid Instagram username", IG_GENERIC),

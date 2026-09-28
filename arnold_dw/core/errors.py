@@ -37,14 +37,15 @@ def instagram_friendly_error(exc: Exception) -> str:
         return "Instagram kullanıcısı veya gönderisi bulunamadı."
     if "private profile" in low or "is private" in low:
         return "Bu hesap gizli. Yalnızca profil fotoğrafı kullanılabilir."
-    if "login" in low or "401" in low or "403" in low:
-        return "Bu içeriğe oturum açmadan erişilemiyor."
+    # Rate limiting first: Instagram also sends it as `401 ... "Please wait a few minutes"`.
     if (
         "429" in low
         or "too many requests" in low
         or "please wait a few minutes" in low
     ):
         return "Instagram geçici olarak çok fazla istek algıladı. Biraz sonra deneyin."
+    if "login" in low or "401" in low or "403" in low:
+        return "Bu içeriğe oturum açmadan erişilemiyor."
     if "connection" in low or "network" in low or "timeout" in low:
         return "Instagram bağlantısı kurulamadı. İnternet bağlantınızı kontrol edin."
     return "Instagram içeriği alınamadı. Linki veya kullanıcı adını kontrol edin."
