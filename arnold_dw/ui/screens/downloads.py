@@ -32,6 +32,7 @@ from arnold_dw.ui.widgets.jobviews import ImageCache, JobRow
 log = logging.getLogger(__name__)
 
 PAGE_SIZE = 40
+BUILD_CHUNK = 6  # rows created per UI turn; the rest follow on the next turns
 
 
 class DownloadsScreen(Screen):
@@ -47,6 +48,7 @@ class DownloadsScreen(Screen):
         self._layout = None      # (active ids, finished ids) currently packed
         self._limit = PAGE_SIZE
         self._missing = set()    # finished job ids whose file is gone
+        self._build_job = None   # pending schedule() that creates the next chunk of rows
 
     # ------------------------------------------------------------------
     # Construction
@@ -140,6 +142,14 @@ class DownloadsScreen(Screen):
     # ------------------------------------------------------------------
 
     def _resync(self):
+        """Bring the rows in line with the manager's job list.
+
+        At most BUILD_CHUNK new rows are created per call; while rows are
+        missing, the list shows the built prefix and the next chunk is
+        scheduled, so a long history appears at once and fills in without
+        freezing the window.
+        """
+        self._build_job = self.cancel_job(self._build_job)
         ordered = self.app.downloads.jobs()
         self._jobs = {job.id: job for job in ordered}
         active = [job for job in ordered if job.is_active]
@@ -155,20 +165,36 @@ class DownloadsScreen(Screen):
                 if job is None:
                     self.images.forget(job_id)
 
+        budget = BUILD_CHUNK
+        shown = []
         for job in active + visible:
             row = self._rows.get(job.id)
             if row is None:
+                if budget == 0:
+                    break
+                budget -= 1
                 parent = self.active_list if job.is_active else self.finished_list
                 row = self._rows[job.id] = JobRow(parent, job, self.images, self)
                 if job.id in self._missing:
                     row.set_file_exists(False)
             else:
                 row.update_job(job)
+            shown.append(job)
+        pending = len(shown) < len(wanted)
+        if pending:
+            shown_ids = {job.id for job in shown}
+            for job_id, row in self._rows.items():
+                if job_id not in shown_ids:
+                    row.pack_forget()
+            self._build_job = self.schedule(1, self._resync)
 
-        layout = ([j.id for j in active], [j.id for j in visible], len(finished) > len(visible))
+        shown_active = [job for job in shown if job.is_active]
+        shown_visible = [job for job in shown if not job.is_active]
+        layout = ([j.id for j in shown_active], [j.id for j in shown_visible],
+                  len(finished) > len(visible), pending)
         if layout != self._layout:
             self._layout = layout
-            self._pack_sections(active, visible, len(finished))
+            self._pack_sections(shown_active, shown_visible, len(visible) if pending else len(finished))
         self._update_summary()
 
     def _pack_sections(self, active, visible, finished_total):
@@ -228,9 +254,9 @@ class DownloadsScreen(Screen):
     # ------------------------------------------------------------------
 
     def _check_files(self):
-        targets = [(row.job_id, self._jobs[row.job_id].primary_file)
-                   for row in self._rows.values()
-                   if not row.active and row.job_id in self._jobs and self._jobs[row.job_id].primary_file]
+        # Every listed finished job, including rows still waiting to be built.
+        listed = [job for job in self._jobs.values() if job.is_finished][:self._limit]
+        targets = [(job.id, job.primary_file) for job in listed if job.primary_file]
         if targets:
             self.start_worker(self._check_files_worker, targets)
 

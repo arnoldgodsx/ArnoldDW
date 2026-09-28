@@ -305,6 +305,22 @@ def test_thumbnail_is_cached_to_disk_and_removed_with_the_job(tmp_path, runner):
     m.close()
 
 
+def test_close_drops_covers_of_jobs_that_are_not_kept_in_history(tmp_path, runner):
+    from PIL import Image
+
+    thumbs = tmp_path / "thumbs"
+    m = DownloadManager({"fake": Runner(runner.run)}, history=History(str(tmp_path / "h.db")),
+                        thumbs_dir=str(thumbs))
+    kept = m.enqueue(new_job(1, thumbnail_image=Image.new("RGB", (8, 8)))).id
+    dropped = m.enqueue(new_job(2, thumbnail_image=Image.new("RGB", (8, 8)))).id
+    wait_for(lambda: len(runner.started) == 2)
+    runner.release(kept)
+    m.cancel(dropped)
+    m.wait_idle(TIMEOUT)
+    m.close()
+    assert sorted(p.name for p in thumbs.iterdir()) == [f"{kept}.png"]
+
+
 def test_snapshot_round_trip_through_record():
     job = new_job(options={"format": "MP3", "quality": "192 kbps"})
     job.status, job.files, job.finished_at = jobs.DONE, ["x.mp3"], 123.0

@@ -386,10 +386,19 @@ class DownloadManager:
             self._io.submit(lambda: None).result()
 
     def close(self):
-        """Finish pending history writes; call once no job runs any more."""
+        """Finish pending history writes; call once no job runs any more.
+
+        Covers of jobs that won't come back from the history (cancelled ones,
+        or all of them without a history) are deleted here.
+        """
         if not self._closed:
             self._closed = True
             self._io.shutdown(wait=True)
+            with self._lock:
+                transient = [j.thumbnail for j in self._jobs.values()
+                             if j.thumbnail and (self._history is None or j.status not in RECORDED_STATES)]
+            for path in transient:
+                _remove_file(path)
 
     # ------------------------------------------------------------------
     # Internals

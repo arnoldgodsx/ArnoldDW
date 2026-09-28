@@ -114,8 +114,8 @@ def test_download_reports_progress_then_processing(tmp_path, fake_ydl):
     result = youtube.download("u", "MP4", "720p", str(tmp_path / "out"), threading.Event(),
                               on_progress=lambda *a: progress.append(a),
                               on_processing=lambda: processing.append(True))
-    # ETA is for the whole job: (200 - 50) bytes left at 1000 B/s. A stream of unknown size -> None.
-    assert progress == [(0.25, 50, 1000, 0.15), (1.0, 200, None, None), (None, 210, None, None)]
+    # A single stream of unknown job size keeps yt-dlp's own ETA; a stream of unknown size -> None.
+    assert progress == [(0.25, 50, 1000, 3), (1.0, 200, None, None), (None, 210, None, None)]
     assert processing == [True]
     assert result.path == os.path.join(str(tmp_path / "out"), "Title [abc] 720p.mp4")
     assert result.already_existed is False

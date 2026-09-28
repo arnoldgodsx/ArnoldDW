@@ -21,8 +21,8 @@ class CombinedProgress:
     """Feed it every progress report of every stream; read one job-wide value back.
 
     `expected_sizes` are the announced sizes of the streams in download order
-    (None where unknown) - with them the job total is known before the second
-    stream starts. Without sizes each stream counts as an equal share.
+    (None where unknown) - with all of them the job total is known before the
+    second stream starts. Otherwise each stream counts as an equal share.
     """
 
     def __init__(self, stream_count=1, expected_sizes=None):
@@ -30,6 +30,9 @@ class CombinedProgress:
         self._count = max(1, stream_count, len(self._expected))
         self._streams = {}  # key -> [downloaded, total] in first-seen order
         self._last_fraction = 0.0
+        # Byte-based only when every size is announced up front; switching modes
+        # halfway (a size learned late) would freeze the bar for a long stretch.
+        self._by_bytes = bool(self._expected) and len(self._expected) >= self._count and all(self._expected)
 
     @classmethod
     def for_info(cls, info):
@@ -56,7 +59,7 @@ class CombinedProgress:
         sizes = self._sizes()
         fraction = None
         job_total = None
-        if all(sizes):
+        if self._by_bytes and all(sizes):
             job_total = sum(sizes)
             fraction = done_bytes / job_total
         elif stream[1]:
