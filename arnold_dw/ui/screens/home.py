@@ -31,7 +31,8 @@ class PlatformCard:
     screen: str  # name of the screen it opens (see ui.window.SCREENS)
 
 
-# A card whose screen isn't registered in ui.window.SCREENS yet is shown but inert.
+# Only cards whose screen is registered in ui.window.SCREENS are shown: a card that
+# opens nothing would be a dead control (TikTok's engine exists, its screen doesn't yet).
 PLATFORMS = (
     PlatformCard("YouTube", paths.YOUTUBE_LOGO_PATH, "youtube"),
     PlatformCard("Instagram", paths.INSTAGRAM_LOGO_PATH, "instagram"),
@@ -64,7 +65,8 @@ class HomeScreen(Screen):
         cards = ctk.CTkFrame(self, fg_color="transparent")
         cards.place(relx=0.5, rely=0.5, anchor="center", relwidth=1)
 
-        for index, platform in enumerate(PLATFORMS):
+        available = [p for p in PLATFORMS if self.app.has_screen(p.screen)]
+        for index, platform in enumerate(available):
             logo = Image.open(platform.logo_path).convert("RGBA")
             platform_image = ctk.CTkImage(
                 light_image=logo,
@@ -73,9 +75,7 @@ class HomeScreen(Screen):
             )
             self.platform_images[platform.title] = platform_image
 
-            command = None
-            if self.app.has_screen(platform.screen):
-                command = lambda screen=platform.screen: self.app.show_screen(screen)  # noqa: E731
+            command = lambda screen=platform.screen: self.app.show_screen(screen)  # noqa: E731
 
             card = ctk.CTkButton(
                 cards,
@@ -94,7 +94,7 @@ class HomeScreen(Screen):
                 text_color=TEXT,
                 font=(FONT_FAMILY, 17, "bold"),
             )
-            card.pack(fill="x", pady=(0, 22 if index < len(PLATFORMS) - 1 else 0))
+            card.pack(fill="x", pady=(0, 22 if index < len(available) - 1 else 0))
 
         self._build_settings_entry()
 
