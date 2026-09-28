@@ -96,15 +96,32 @@ def test_run_instagram_profile(monkeypatch):
     preview = instagram.ProfilePreview(loader=None, profile="PROFILE", avatar=None)
     seen = {}
 
-    def fake_download_profile(profile, categories, folder, cancel_event, on_progress, on_file=None):
-        seen.update(profile=profile, categories=categories)
+    def fake_download_profile(profile, categories, folder, cancel_event, on_progress, on_file=None,
+                              *, browser=None):
+        seen.update(profile=profile, categories=categories, browser=browser)
 
     monkeypatch.setattr(instagram, "download_profile", fake_download_profile)
     job = DownloadJob(platform=runners.PLATFORM_INSTAGRAM, url="u", title="t", download_dir="d",
                       options=runners.instagram_profile_options("user", ["posts", "reels"]), context=preview)
     result = runners.run_instagram(job, FakeContext())
-    assert seen == {"profile": "PROFILE", "categories": ["posts", "reels"]}
+    assert seen == {"profile": "PROFILE", "categories": ["posts", "reels"], "browser": None}
     assert result.files == [] and result.already_existed is False
+
+
+def test_run_instagram_profile_passes_the_opted_in_browser(monkeypatch):
+    preview = instagram.ProfilePreview(loader=None, profile="PROFILE", avatar=None)
+    seen = {}
+
+    def fake_download_profile(profile, categories, folder, cancel_event, on_progress, on_file=None,
+                              *, browser=None):
+        seen["browser"] = browser
+
+    monkeypatch.setattr(instagram, "download_profile", fake_download_profile)
+    job = DownloadJob(platform=runners.PLATFORM_INSTAGRAM, url="u", title="t", download_dir="d",
+                      options=runners.instagram_profile_options("user", ["posts"], browser="firefox"),
+                      context=preview)
+    runners.run_instagram(job, FakeContext())
+    assert seen["browser"] == "firefox"
 
 
 def test_default_runners_cover_both_platforms():

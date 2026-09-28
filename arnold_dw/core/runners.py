@@ -42,8 +42,8 @@ def instagram_post_options(shortcode, item_indexes):
     return {"mode": "post", "shortcode": shortcode, "items": sorted(item_indexes)}
 
 
-def instagram_profile_options(username, categories):
-    return {"mode": "profile", "username": username, "categories": list(categories)}
+def instagram_profile_options(username, categories, browser=None):
+    return {"mode": "profile", "username": username, "categories": list(categories), "browser": browser}
 
 
 def run_instagram(job, ctx):
@@ -73,7 +73,8 @@ def run_instagram(job, ctx):
             preview = instagram.resolve(instagram.profile_url(options["username"]))
         ctx.check_cancelled()
         instagram.download_profile(preview.profile, options.get("categories") or [], job.download_dir,
-                                   ctx.cancel_event, on_progress, on_file=on_file)
+                                   ctx.cancel_event, on_progress, on_file=on_file,
+                                   browser=options.get("browser"))
     return RunResult(files=files, already_existed=bool(files) and not created)
 
 

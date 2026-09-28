@@ -4,6 +4,7 @@ import logging
 
 import customtkinter as ctk
 
+from arnold_dw.config import save_settings
 from arnold_dw.core import instagram, runners
 from arnold_dw.core.errors import instagram_friendly_error
 from arnold_dw.core.jobs import DownloadJob
@@ -18,11 +19,13 @@ from arnold_dw.ui.theme import (
     HOME_CARD,
     SUCCESS,
     SURFACE,
+    SURFACE_2,
     SURFACE_3,
     TEXT,
     TEXT_FAINT,
     TEXT_MUTED,
 )
+from arnold_dw.ui.widgets.dropdown import ThemedDropdown
 from arnold_dw.ui.widgets.inputs import InputRow, SaveLocation
 from arnold_dw.ui.widgets.jobviews import JobStrip
 
@@ -40,6 +43,10 @@ PROFILE_CATEGORIES = (
     (instagram.CATEGORY_PROFILE_PIC, "Profil Fotoğrafı"),
 )
 
+# Display name for each arnold_dw.core.instagram.SUPPORTED_BROWSERS entry.
+BROWSER_LABELS = {"firefox": "Firefox", "edge": "Edge", "chrome": "Chrome", "brave": "Brave"}
+BROWSER_BY_LABEL = {label: key for key, label in BROWSER_LABELS.items()}
+
 
 class InstagramScreen(Screen):
     name = "instagram"
@@ -56,10 +63,12 @@ class InstagramScreen(Screen):
         self.instagram_mode = None
         self.instagram_post = None
         self.instagram_profile = None
+        self.instagram_profile_avatar = None
         self.instagram_media = []
         self.instagram_media_vars = []
         self.instagram_category_vars = {}
         self.instagram_preview_images = []
+        self.browser_choice_var = ctk.StringVar(value=BROWSER_LABELS[instagram.SUPPORTED_BROWSERS[0]])
         self._preview = None     # the resolved PostPreview / ProfilePreview (reused by the job)
         self._job_thumb = None   # small PIL cover handed to the queued job
 
@@ -188,6 +197,8 @@ class InstagramScreen(Screen):
         self._last_value = ""
         self.entry.focus_set()
         self.instagram_mode = None
+        self.instagram_profile = None
+        self.instagram_profile_avatar = None
         self.instagram_media = []
         self.instagram_category_vars = {}
         self._preview = None
@@ -380,11 +391,16 @@ class InstagramScreen(Screen):
             var.set(selected)
         self._update_download_state()
 
+    def _has_browser_session(self):
+        return bool(self.app.settings.instagram_browser)
+
     def _apply_profile(self, profile, avatar):
         self.instagram_mode = "profile"
         self.instagram_profile = profile
+        self.instagram_profile_avatar = avatar
         self.instagram_post = None
         self.instagram_media = []
+        self.instagram_category_vars = {}
         self._replace_preview()
 
         header = ctk.CTkFrame(self.preview_content, fg_color="transparent")
@@ -412,25 +428,39 @@ class InstagramScreen(Screen):
                 anchor="w",
             ).pack(fill="x", pady=(3, 0))
 
+        # Private + not (verifiably) followed: try nothing at all, not even the profile picture.
+        if profile.is_private:
+            self._set_status(
+                "Bu hesap gizli. Bu hesabı takip etmiyorsanız hiçbir içerik indirilemez.", TEXT_MUTED
+            )
+            self._update_download_state()
+            return
+
+        # Scrollable: categories + the session-consent box together can run past the card's
+        # fixed height, and this content (unlike the carousel strip) doesn't fit a fixed size.
+        scroll = ctk.CTkScrollableFrame(self.preview_content, fg_color="transparent")
+        scroll.pack(fill="both", expand=True)
+
         ctk.CTkLabel(
-            self.preview_content,
+            scroll,
             text="İNDİRİLEBİLİR KATEGORİLER",
             text_color=TEXT_FAINT,
             font=(FONT_FAMILY, 11, "bold"),
             anchor="w",
         ).pack(fill="x", pady=(0, 8))
 
-        self.instagram_category_vars = {}
+        has_session = self._has_browser_session()
         for key, label in PROFILE_CATEGORIES:
+            needs_session = key != instagram.CATEGORY_PROFILE_PIC
+            enabled = has_session or not needs_session
             var = ctk.BooleanVar(value=False)
             self.instagram_category_vars[key] = var
-            private_only_pic = profile.is_private and key != instagram.CATEGORY_PROFILE_PIC
             ctk.CTkCheckBox(
-                self.preview_content,
+                scroll,
                 text=label,
                 variable=var,
                 command=self._update_download_state,
-                state="disabled" if private_only_pic else "normal",
+                state="normal" if enabled else "disabled",
                 height=38,
                 corner_radius=6,
                 checkbox_width=20,
@@ -443,11 +473,65 @@ class InstagramScreen(Screen):
                 font=(FONT_FAMILY, 13, "bold"),
             ).pack(fill="x", pady=(0, 6))
 
-        if profile.is_private:
-            self._set_status("Gizli hesaplarda yalnızca profil fotoğrafı indirilebilir.", TEXT_MUTED)
-        else:
+        if has_session:
             self._set_status("")
+        else:
+            self._build_session_consent(scroll)
+            self._set_status("Gönderiler/Reels için tarayıcı oturumu gerekiyor.", TEXT_MUTED)
         self._update_download_state()
+
+    def _build_session_consent(self, parent):
+        box = ctk.CTkFrame(
+            parent, fg_color=SURFACE_2, corner_radius=10, border_width=1, border_color=BORDER,
+        )
+        box.pack(fill="x", pady=(4, 0))
+        inner = ctk.CTkFrame(box, fg_color="transparent")
+        inner.pack(fill="x", padx=12, pady=12)
+
+        ctk.CTkLabel(
+            inner,
+            text="Toplu gönderi/Reels indirme için isteğe bağlı olarak tarayıcı oturumunuzu "
+                 "kullanabiliriz. Seçilen tarayıcıdaki Instagram oturumu yalnızca bu indirme için "
+                 "okunur; çerezleriniz diske yazılmaz veya günlüğe kaydedilmez.",
+            text_color=TEXT_MUTED,
+            font=(FONT_FAMILY, 11),
+            anchor="w",
+            justify="left",
+            wraplength=300,
+        ).pack(fill="x", pady=(0, 10))
+
+        row = ctk.CTkFrame(inner, fg_color="transparent")
+        row.pack(fill="x")
+        self.browser_menu = ThemedDropdown(
+            row,
+            values=list(BROWSER_LABELS.values()),
+            variable=self.browser_choice_var,
+            height=38,
+            corner_radius=8,
+            font=(FONT_FAMILY, 12, "bold"),
+        )
+        self.browser_menu.pack(side="left", fill="x", expand=True, padx=(0, 8))
+
+        ctk.CTkButton(
+            row,
+            text="Onayla ve etkinleştir",
+            command=self._enable_browser_session,
+            height=38,
+            corner_radius=8,
+            fg_color=ACCENT,
+            hover_color=ACCENT_HOVER,
+            text_color=TEXT,
+            font=(FONT_FAMILY, 12, "bold"),
+        ).pack(side="left")
+
+    def _enable_browser_session(self):
+        browser = BROWSER_BY_LABEL.get(self.browser_choice_var.get())
+        if not browser:
+            return
+        self.app.settings.instagram_browser = browser
+        save_settings(self.app.settings)
+        if self.instagram_mode == "profile" and self.instagram_profile is not None:
+            self._apply_profile(self.instagram_profile, self.instagram_profile_avatar)
 
     def _update_download_state(self):
         enabled = False
@@ -462,7 +546,7 @@ class InstagramScreen(Screen):
         )
 
     # ------------------------------------------------------------------
-    # Download
+    # Download (queued through app.downloads - see core.jobs / core.runners)
     # ------------------------------------------------------------------
 
     def _on_download(self):
@@ -485,7 +569,8 @@ class InstagramScreen(Screen):
             if not categories:
                 return
             profile = self.instagram_profile
-            options = runners.instagram_profile_options(profile.username, categories)
+            browser = self.app.settings.instagram_browser or None
+            options = runners.instagram_profile_options(profile.username, categories, browser=browser)
             url = instagram.profile_url(profile.username)
             title = f"@{profile.username} · Profil"
         else:

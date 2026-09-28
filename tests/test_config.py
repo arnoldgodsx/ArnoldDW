@@ -53,6 +53,21 @@ def test_invalid_download_dir_falls_back_to_default(cfg, value):
     assert load_settings(cfg).download_dir == paths.default_download_dir()
 
 
+def test_instagram_browser_defaults_to_off(cfg):
+    assert load_settings(cfg).instagram_browser == ""
+
+
+def test_instagram_browser_round_trips(cfg):
+    save_settings(Settings(instagram_browser="firefox"), cfg)
+    assert load_settings(cfg).instagram_browser == "firefox"
+
+
+@pytest.mark.parametrize("value", [42, ["firefox"], True])
+def test_invalid_instagram_browser_falls_back_to_off(cfg, value):
+    _write(cfg, json.dumps({"schema": 1, "instagram_browser": value}))
+    assert load_settings(cfg).instagram_browser == ""
+
+
 def test_unknown_keys_and_future_schema_are_tolerated(cfg):
     _write(cfg, json.dumps({"schema": 99, "download_dir": "D:\\x", "brand_new_option": True}))
     assert load_settings(cfg).download_dir == "D:\\x"
@@ -70,6 +85,7 @@ def test_save_writes_schema_and_round_trips(cfg):
     assert data["schema"] == SCHEMA_VERSION
     assert data["download_dir"] == "D:\\Medya"
     assert data["max_concurrent"] == 2
+    assert data["instagram_browser"] == ""
     assert load_settings(cfg).download_dir == "D:\\Medya"
 
 

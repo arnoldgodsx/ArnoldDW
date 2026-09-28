@@ -22,6 +22,9 @@ SCHEMA_VERSION = 1
 
 VIDEO_MODES = ("compat", "quality")
 ENGINE_CHANNELS = ("stable", "nightly")
+# Kept in sync with arnold_dw.core.instagram.SUPPORTED_BROWSERS; not imported from there to keep
+# this module free of the instaloader/yt-dlp dependency chain it pulls in.
+INSTAGRAM_BROWSERS = ("", "firefox", "edge", "chrome", "brave")
 
 
 def _choice(default, choices):
@@ -40,6 +43,9 @@ class Settings:
     engine_auto_check: bool = True
     last_engine_check: float = 0.0  # time.time() of the last successful engine update check
     max_concurrent: int = 2  # downloads running at the same time (clamped by core.jobs)
+    # "" = off, otherwise one of arnold_dw.core.instagram.SUPPORTED_BROWSERS.
+    # Opt-in only: set from the Instagram screen's "use my browser session" consent step.
+    instagram_browser: str = _choice("", INSTAGRAM_BROWSERS)
 
     def to_dict(self):
         return {"schema": SCHEMA_VERSION, **dataclasses.asdict(self)}

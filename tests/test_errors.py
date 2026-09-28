@@ -1,6 +1,12 @@
 import pytest
 
-from arnold_dw.core.errors import friendly_error, instagram_friendly_error
+from arnold_dw.core.errors import (
+    InstagramCookieError,
+    InstagramRateLimited,
+    InstagramSessionRequired,
+    friendly_error,
+    instagram_friendly_error,
+)
 
 GENERIC = "Bir hata oluştu. Lütfen bağlantıyı kontrol edip tekrar deneyin."
 IG_GENERIC = "Instagram içeriği alınamadı. Linki veya kullanıcı adını kontrol edin."
@@ -33,7 +39,9 @@ def test_friendly_error(message, expected):
 @pytest.mark.parametrize("message, expected", [
     ("Profile does not exist: foo", "Instagram kullanıcısı veya gönderisi bulunamadı."),
     ("404 Client Error: Not Found", "Instagram kullanıcısı veya gönderisi bulunamadı."),
-    ("Profile foo is private", "Bu hesap gizli. Yalnızca profil fotoğrafı kullanılabilir."),
+    ("Profile foo is private", "Bu hesap gizli. Bu hesabı takip etmiyorsanız içerik indirilemez."),
+    ("Profile foo: private but not followed.",
+     "Bu hesap gizli. Bu hesabı takip etmiyorsanız içerik indirilemez."),
     ("Login required", "Bu içeriğe oturum açmadan erişilemiyor."),
     ("401 Unauthorized", "Bu içeriğe oturum açmadan erişilemiyor."),
     ("429 Too Many Requests",
@@ -49,3 +57,26 @@ def test_friendly_error(message, expected):
 ])
 def test_instagram_friendly_error(message, expected):
     assert instagram_friendly_error(Exception(message)) == expected
+
+
+def test_instagram_rate_limited_reports_minutes_remaining():
+    assert instagram_friendly_error(InstagramRateLimited(61)) == (
+        "Instagram geçici olarak çok fazla istek algıladı. Yaklaşık 2 dakika sonra tekrar deneyin."
+    )
+    assert instagram_friendly_error(InstagramRateLimited(300)) == (
+        "Instagram geçici olarak çok fazla istek algıladı. Yaklaşık 5 dakika sonra tekrar deneyin."
+    )
+
+
+@pytest.mark.parametrize("browser, expected", [
+    ("chrome", "Chrome oturumu okunamadı — Firefox veya Edge deneyin."),
+    ("firefox", "Firefox tarayıcı oturumu okunamadı. Başka bir tarayıcı deneyin."),
+    ("edge", "Edge tarayıcı oturumu okunamadı. Başka bir tarayıcı deneyin."),
+    ("brave", "Brave tarayıcı oturumu okunamadı. Başka bir tarayıcı deneyin."),
+])
+def test_instagram_cookie_error_by_browser(browser, expected):
+    assert instagram_friendly_error(InstagramCookieError(browser)) == expected
+
+
+def test_instagram_session_required_message():
+    assert "Tarayıcı oturumumu kullan" in instagram_friendly_error(InstagramSessionRequired())
