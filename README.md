@@ -53,16 +53,16 @@ Paste a link, check the preview, pick a format, and keep working while it downlo
 | 👀 **Preview** | Thumbnail, title, channel and duration before you download. Already-downloaded files are detected. |
 | ⚙️ **Settings** | Download folder, video mode, metadata/cover embedding, download-engine (yt-dlp) updates with Stable/Nightly channels and optional daily check, helper tool status. |
 | 🔄 **Self-updating engine** | The yt-dlp engine updates in place from PyPI over HTTPS with SHA-256 verification, staged install and automatic rollback, so YouTube changes are fixed without reinstalling the app. |
-| 🧰 **Batteries included** | ffmpeg/ffprobe (LGPL build) and the Deno JavaScript runtime ship inside the package. Nothing else to install. |
+| 🚀 **Small download, guided first launch** | The installer is tiny. On first launch a setup screen downloads ffmpeg/ffprobe (LGPL build) and the Deno JavaScript runtime once (~71 MB, every file SHA-256 verified). Nothing else to install. |
 | 🌍 **Bilingual setup** | The installer and uninstaller speak English and Turkish. |
 
-> Download engines for TikTok, X, Reddit, SoundCloud, Twitch and Dailymotion are already built, but their screens are not finished yet, so the app does not offer them in 1.0.
+> Arnold DW focuses on YouTube and Instagram. Other sites are not offered in the app.
 
 ## System requirements
 
 - Windows 10 or Windows 11, 64-bit (x64)
-- About 310 MB of free disk space for the app (it bundles Python, ffmpeg and Deno), plus space for your downloads
-- An internet connection
+- About 320 MB of free disk space (app + ffmpeg + Deno), plus space for your downloads
+- An internet connection (also used once on first launch to download ffmpeg and Deno, ~71 MB)
 
 No Python, ffmpeg or other tools need to be installed separately.
 
@@ -70,7 +70,7 @@ No Python, ffmpeg or other tools need to be installed separately.
 
 ### Setup wizard (recommended)
 
-1. Go to the [latest release](https://github.com/arnoldgodsx/ArnoldDW/releases/latest) and download **`ArnoldDW-<version>-setup.exe`** — a single file of about 90 MB that contains everything.
+1. Go to the [latest release](https://github.com/arnoldgodsx/ArnoldDW/releases/latest) and download **`ArnoldDW-<version>-setup.exe`** — a single file of about 22 MB.
 2. Run it. The installer is not code-signed yet, so Windows SmartScreen may show *"Windows protected your PC"*. After making sure you downloaded the file from the official release page, choose **More info → Run anyway**.
 3. Walk through the wizard:
 
@@ -83,21 +83,26 @@ No Python, ffmpeg or other tools need to be installed separately.
    | Shortcuts | A Start menu folder is always created; a desktop shortcut is optional |
    | Finish | Optionally launch Arnold DW right away |
 
+4. **First launch.** Arnold DW opens a setup screen that downloads the two helper tools it needs — FFmpeg (merging video and audio, MP3 conversion) and Deno (unlocks every YouTube quality) — with live progress and speed. This happens only once; if the connection drops, press **Tekrar dene** (Retry). The tools are stored in `%LOCALAPPDATA%\Arnold DW\runtime`.
+
 ### Silent / unattended install
 
 The setup supports the standard [Inno Setup command-line switches](https://jrsoftware.org/ishelp/index.php?topic=setupcmdline), which is handy for scripting or deployment tools:
 
 ```powershell
 # Per-user, no prompts, with a desktop shortcut
-.\ArnoldDW-1.0.0-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER /TASKS=desktopicon
+.\ArnoldDW-1.1.0-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER /TASKS=desktopicon
 
 # All users, custom folder, with a log file
-.\ArnoldDW-1.0.0-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ALLUSERS /DIR="D:\Apps\Arnold DW" /LOG="$env:TEMP\arnolddw-setup.log"
+.\ArnoldDW-1.1.0-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /ALLUSERS /DIR="D:\Apps\Arnold DW" /LOG="$env:TEMP\arnolddw-setup.log"
+
+# Optional: download ffmpeg + Deno for the current user now instead of on first launch
+& "$env:LOCALAPPDATA\Programs\Arnold DW\Arnold DW.exe" --install-components
 ```
 
 ## Updating
 
-Download the newer setup from the [releases page](https://github.com/arnoldgodsx/ArnoldDW/releases) and run it. The wizard recognises the existing installation, closes Arnold DW if it is running, removes the old runtime files and installs the new version into the same folder. Your language, folder and shortcut choices, settings and download history are kept.
+Download the newer setup from the [releases page](https://github.com/arnoldgodsx/ArnoldDW/releases) and run it. The wizard recognises the existing installation, closes Arnold DW if it is running, removes the old runtime files and installs the new version into the same folder. Your language, folder and shortcut choices, settings and download history are kept, and FFmpeg/Deno are only downloaded again when a new version pins different ones.
 
 The **download engine** (yt-dlp) updates separately from inside the app: **Settings → Download engine → Check for updates**.
 
@@ -112,7 +117,7 @@ Use any of these:
 The uninstaller:
 
 1. Offers to close Arnold DW if it is still running (any active downloads stop).
-2. Removes the program files, shortcuts and the *Installed apps* entry.
+2. Removes the program files, the downloaded FFmpeg/Deno (`%LOCALAPPDATA%\Arnold DW\runtime`), shortcuts and the *Installed apps* entry.
 3. Asks whether to also delete your settings, download history, logs and engine updates in `%APPDATA%\Arnold DW`. Answer **No** to keep them for a later reinstall.
 
 **Your downloaded files are never deleted.**
@@ -127,6 +132,7 @@ For unattended removal run `unins000.exe /VERYSILENT /SUPPRESSMSGBOXES` from the
 | Settings | `%APPDATA%\Arnold DW\config.json` |
 | Download history and thumbnails | `%APPDATA%\Arnold DW\history.db`, `%APPDATA%\Arnold DW\thumbs\` |
 | Logs | `%APPDATA%\Arnold DW\logs\` (also reachable from **Settings → About → Open log folder**) |
+| FFmpeg and Deno (downloaded on first launch) | `%LOCALAPPDATA%\Arnold DW\runtime\` |
 | Updated download engines | `%APPDATA%\Arnold DW\engine\` |
 | Downloads (default) | `%USERPROFILE%\Downloads\Arnold DW` (change it in Settings) |
 
@@ -156,7 +162,7 @@ cd ArnoldDW
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt -r requirements-dev.txt
-python tools/fetch_binaries.py   # pinned, SHA-256-verified ffmpeg/ffprobe + Deno into bin/
+python tools/fetch_binaries.py   # optional: pinned ffmpeg/ffprobe + Deno into bin/ (skips the first-launch screen)
 python app.py
 ```
 
@@ -186,10 +192,10 @@ Output in `dist\`:
 | `ArnoldDW-<version>-win64.zip` | Portable package (only with `-Portable`) |
 | `ArnoldDW-<version>-setup.exe` | Setup wizard with uninstaller |
 
-To verify an installer end to end (silent install → shortcuts and *Installed apps* entry → launch → uninstall while running → everything removed):
+To verify an installer end to end (silent install → shortcuts and *Installed apps* entry → first-launch component download → launch → uninstall while running → everything removed):
 
 ```powershell
-.\tools\installer_smoke.ps1 -Setup dist\ArnoldDW-1.0.0-setup.exe
+.\tools\installer_smoke.ps1 -Setup dist\ArnoldDW-1.1.0-setup.exe
 ```
 
 CI runs this same check on every push.
@@ -210,7 +216,7 @@ ArnoldDW/
 ├── packaging/
 │   ├── ArnoldDW.spec         # PyInstaller build definition
 │   └── installer.iss         # Inno Setup wizard + uninstaller
-├── tools/                    # build.ps1, installer_smoke.ps1, fetch_binaries.py, make_manifest.py
+├── tools/                    # build.ps1, installer_smoke.ps1, build_runtime_packs.py, fetch_binaries.py, make_manifest.py
 ├── tests/                    # pytest suite
 ├── docs/                     # User guides (English and Turkish), developer and release docs
 └── site/                     # Static promotional website

@@ -127,14 +127,14 @@ Uygulama logosu, uygulama simgesi (`logo/icon.ico`, `logo/app-logo.png`) ve tüm
 
 ### Deno
 
-- **Version:** Deno `2.9.7`, downloaded from the official Windows x64 MSVC release asset. Archive SHA-256: `a0c3101b4158d1dfb7d6a78a7bf0f3de80c96bb423c152beec8beb22786f2238`. Only `deno.exe` is included.
+- **Version:** Deno `2.9.7`, downloaded from the official Windows x64 MSVC release asset. Archive SHA-256: `a0c3101b4158d1dfb7d6a78a7bf0f3de80c96bb423c152beec8beb22786f2238`. Only `deno.exe` is used. It is not part of the installer: the app downloads it on first launch (from an xz repack on this repository's `runtime-binaries` release, or the official archive) and verifies its SHA-256 (`arnold_dw/core/runtime/components.py`).
 - **License:** MIT. Full text: [licenses/Deno-MIT.txt](licenses/Deno-MIT.txt), copied from the official Deno `v2.9.7` source tag.
 - **Project/source:** [Deno v2.9.7 source](https://github.com/denoland/deno/tree/v2.9.7).
 
 ### FFmpeg
 
-- **Version:** `tools/fetch_binaries.py` downloads the Windows x64 LGPL shared FFmpeg `n9.0.2-27-g7e93014c5b` asset from BtbN release tag `autobuild-2026-10-12-13-12`. Archive SHA-256: `de3f3b16b3dbf2038a56878aa35795f48bd220f01479697e008470773cecba5b`. Because BtbN prunes old autobuilds, the release workflow also mirrors this exact, hash-verified archive to this repository's `runtime-binaries` release.
-- **Included files:** `ffmpeg.exe`, `ffprobe.exe`, and the DLLs in the same release archive; `ffplay.exe` is omitted. The archive is 77,230,796 bytes and the extracted files total 157,248,512 bytes. The shared variant has a smaller installed footprint than the LGPL static build.
+- **Version:** the app downloads on first launch (and `tools/fetch_binaries.py` fetches for source runs) the Windows x64 LGPL shared FFmpeg `n9.0.2-27-g7e93014c5b` asset from BtbN release tag `autobuild-2026-10-12-13-12`. Archive SHA-256: `de3f3b16b3dbf2038a56878aa35795f48bd220f01479697e008470773cecba5b`. Because BtbN prunes old autobuilds, the release workflow also mirrors this exact, hash-verified archive to this repository's `runtime-binaries` release.
+- **Included files:** `ffmpeg.exe`, `ffprobe.exe`, and the DLLs in the same release archive (each SHA-256 pinned in `arnold_dw/core/runtime/components.py`); `ffplay.exe` is omitted. The compact xz repack on the `runtime-binaries` release contains exactly these unmodified files. The archive is 77,230,796 bytes and the extracted files total 157,248,512 bytes. The shared variant has a smaller installed footprint than the LGPL static build.
 - **License:** LGPL version 3 or later, shared build. `ffmpeg -version` reports `--enable-version3`; its configuration contains no `--enable-gpl`, and `ffmpeg -L` prints LGPL v3 terms.
 - **Project and source:** [Pinned BtbN release](https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-10-12-13-12), [BtbN build repository](https://github.com/BtbN/FFmpeg-Builds), [FFmpeg n9.0.2 source](https://github.com/FFmpeg/FFmpeg/tree/n9.0.2), and [FFmpeg license information](https://ffmpeg.org/legal.html).
 - **Copyright:** FFmpeg developers and BtbN Windows build contributors. Copyright and license notices for bundled DLL components remain applicable.

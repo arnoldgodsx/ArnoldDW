@@ -1,7 +1,6 @@
 import pytest
 
 from arnold_dw.core.platforms import router
-from arnold_dw.core.platforms.errors import ErrorCode, PlatformError
 from arnold_dw.core.platforms.models import Platform
 
 YT = Platform.YOUTUBE
@@ -9,7 +8,6 @@ YTP = Platform.YOUTUBE_PLAYLIST
 YTC = Platform.YOUTUBE_CHANNEL
 IGP = Platform.INSTAGRAM_POST
 IGU = Platform.INSTAGRAM_PROFILE
-TT = Platform.TIKTOK
 GEN = Platform.GENERIC
 UNK = Platform.UNKNOWN
 
@@ -86,30 +84,6 @@ CASES = [
     ("https://www.instagram.com/stories/natgeo/3456789012345678901/", UNK, None, None),
     ("https://www.instagram.com/accounts/login/", UNK, None, None),
     ("https://www.instagram.com/", UNK, None, None),
-    # --- TikTok ------------------------------------------------------------------------------
-    ("https://www.tiktok.com/@tiktok/video/7689568478570843422", TT,
-     "https://www.tiktok.com/@tiktok/video/7689568478570843422", "7689568478570843422"),
-    ("https://www.tiktok.com/@tiktok/video/7689568478570843422?is_from_webapp=1&sender_device=pc", TT,
-     "https://www.tiktok.com/@tiktok/video/7689568478570843422", None),
-    ("https://m.tiktok.com/@some.user_1/video/7689568478570843422", TT,
-     "https://www.tiktok.com/@some.user_1/video/7689568478570843422", None),
-    ("https://www.tiktok.com/@natgeo/photo/7680195684426927373", TT,
-     "https://www.tiktok.com/@natgeo/photo/7680195684426927373", "7680195684426927373"),
-    ("https://m.tiktok.com/v/7689568478570843422.html", TT,
-     "https://www.tiktok.com/@/video/7689568478570843422", None),
-    ("https://www.tiktok.com/embed/v2/7689568478570843422", TT,
-     "https://www.tiktok.com/@/video/7689568478570843422", None),
-    ("https://www.tiktok.com/embed/7689568478570843422", TT, None, "7689568478570843422"),
-    ("https://www.tiktok.com/player/v1/7689568478570843422?autoplay=1", TT, None, "7689568478570843422"),
-    ("tiktok.com/@tiktok/video/7689568478570843422", TT, None, None),
-    ("Check out this video! #fyp https://vm.tiktok.com/ZMabc1234/ via @tiktok", TT,
-     "https://vm.tiktok.com/ZMabc1234/", "ZMabc1234"),
-    ("https://vt.tiktok.com/ZSe4FqkKd", TT, "https://vt.tiktok.com/ZSe4FqkKd/", "ZSe4FqkKd"),
-    ("https://www.tiktok.com/t/ZTRC5xgJp/", TT, "https://www.tiktok.com/t/ZTRC5xgJp/", "ZTRC5xgJp"),
-    ("https://www.tiktok.com/@tiktok", UNK, None, None),
-    ("https://www.tiktok.com/music/original-sound-7266503814211012609", UNK, None, None),
-    ("https://www.tiktok.com/@tiktok/video/123", UNK, None, None),
-    ("https://vm.tiktok.com/", UNK, None, None),
     # --- generic (yt-dlp extractors) --------------------------------------------------------
     ("https://x.com/SpaceX/status/2080804682918764619", GEN, "https://x.com/SpaceX/status/2080804682918764619", None),
     ("https://twitter.com/SpaceX/status/2080804682918764619", GEN, None, None),
@@ -176,14 +150,6 @@ def test_youtube_subtypes():
     assert router.analyze(WATCH).subtype is None
 
 
-def test_tiktok_subtypes_and_short_links():
-    assert router.analyze("https://www.tiktok.com/@a/photo/7680195684426927373").subtype == "photo"
-    assert router.analyze("https://www.tiktok.com/@a/video/7680195684426927373").subtype == "video"
-    short = router.analyze("https://vm.tiktok.com/ZMabc1234/")
-    assert short.needs_resolve and short.subtype == "short_link"
-    assert not router.analyze("https://www.tiktok.com/@a/video/7680195684426927373").needs_resolve
-
-
 def test_generic_reports_extractor():
     det = router.analyze("https://x.com/SpaceX/status/2080804682918764619")
     assert det.extractor == "Twitter"
@@ -209,78 +175,3 @@ def test_truncated_youtube_id_is_not_generic():
 )
 def test_extract_url(text, expected):
     assert router.extract_url(text) == expected
-
-
-class _FakeResponse:
-    def __init__(self, url):
-        self.url = url
-
-    def close(self):
-        pass
-
-
-class _FakeSession:
-    def __init__(self, final_url=None, exc=None):
-        self.final_url = final_url
-        self.exc = exc
-        self.calls = []
-
-    def get(self, url, **kwargs):
-        self.calls.append((url, kwargs))
-        if self.exc:
-            raise self.exc
-        return _FakeResponse(self.final_url)
-
-
-def test_resolve_short_link_follows_redirect():
-    session = _FakeSession("https://www.tiktok.com/@tiktok/video/7689568478570843422?_r=1&u_code=x")
-    final = router.resolve_short_link("https://vm.tiktok.com/ZMabc1234/", session=session)
-    assert final.startswith("https://www.tiktok.com/@tiktok/video/7689568478570843422")
-    assert session.calls[0][1]["allow_redirects"] is True
-
-
-def test_resolve_short_link_dead_link_lands_on_home():
-    session = _FakeSession("https://www.tiktok.com/?_r=1")
-    with pytest.raises(PlatformError) as err:
-        router.resolve_short_link("https://vm.tiktok.com/ZMdead123/", session=session)
-    assert err.value.code is ErrorCode.EXPIRED_LINK
-    assert "yeniden" in err.value.user_message
-
-
-def test_resolve_short_link_network_error_is_mapped():
-    import requests
-
-    session = _FakeSession(exc=requests.ConnectionError("Failed to resolve host"))
-    with pytest.raises(PlatformError) as err:
-        router.resolve_short_link("https://vm.tiktok.com/ZMabc1234/", session=session)
-    assert err.value.code is ErrorCode.NETWORK
-
-
-def test_analyze_online_expands_short_links():
-    session = _FakeSession("https://www.tiktok.com/@natgeo/photo/7680195684426927373?_r=1")
-    det = router.analyze_online("bak: https://vt.tiktok.com/ZSabc1234/", session=session)
-    assert det.platform is TT
-    assert det.subtype == "photo"
-    assert det.url == "https://www.tiktok.com/@natgeo/photo/7680195684426927373"
-    assert not det.needs_resolve
-
-
-def test_analyze_online_does_not_touch_network_for_normal_links():
-    session = _FakeSession(exc=AssertionError("network used"))
-    assert router.analyze_online(WATCH, session=session).platform is YT
-    assert session.calls == []
-
-
-def test_analyze_online_rejects_short_link_loops():
-    session = _FakeSession("https://vm.tiktok.com/ZMother12/")
-    with pytest.raises(PlatformError) as err:
-        router.analyze_online("https://vm.tiktok.com/ZMabc1234/", session=session)
-    assert err.value.code is ErrorCode.EXPIRED_LINK
-
-
-@pytest.mark.network
-def test_resolve_short_link_live_dead_link():
-    # Real TikTok short link from yt-dlp's own test-suite that has since expired.
-    with pytest.raises(PlatformError) as err:
-        router.resolve_short_link("https://vm.tiktok.com/ZTR45GpSF/")
-    assert err.value.code is ErrorCode.EXPIRED_LINK

@@ -20,16 +20,16 @@ from arnold_dw.core.platforms.models import (
 def _item(**kw):
     base = dict(
         id="abc",
-        url="https://www.tiktok.com/@u/photo/1",
+        url="https://www.youtube.com/watch?v=abc",
         title="Başlık",
-        platform=Platform.TIKTOK,
-        kind=MediaKind.SLIDESHOW,
+        platform=Platform.YOUTUBE,
+        kind=MediaKind.VIDEO,
         uploader="u",
         duration=12.5,
         thumbnail_url="https://img/1.jpg",
         heights=[1080, 720],
         has_audio=True,
-        extractor="TikTokPhoto",
+        extractor="Youtube",
         assets=[MediaAsset("https://img/1.jpg", MediaKind.IMAGE, 1080, 1350, "jpg"),
                 MediaAsset("https://a/m", MediaKind.AUDIO, ext="m4a")],
         extra={"username": "u", "image_count": 1},
@@ -42,7 +42,7 @@ def test_media_item_json_roundtrip():
     item = _item()
     data = json.loads(json.dumps(item.to_dict()))
     assert data["type"] == "media"
-    assert data["platform"] == "tiktok" and data["kind"] == "slideshow"
+    assert data["platform"] == "youtube" and data["kind"] == "video"
     back = result_from_dict(data)
     assert back == item
     assert isinstance(back.platform, Platform) and isinstance(back.assets[1].kind, MediaKind)

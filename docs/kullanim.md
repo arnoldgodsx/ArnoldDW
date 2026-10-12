@@ -2,7 +2,9 @@
 
 ## Uygulamayı açma
 
-Arnold DW'yi Başlat menüsünden veya kurulum sırasında oluşturulan kısayoldan açın. Ana ekranda YouTube ve Instagram ekranlarından birini seçin. Ana ekrandaki TikTok kartı şu an çalışır bir indirme akışı sunmaz.
+İlk açılışta Arnold DW, FFmpeg ve Deno'yu indiren bir kurulum ekranı gösterir (yaklaşık 71 MB, yalnızca bir kez). **Hazır!** yazısı görünene kadar uygulamayı açık tutun; indirme başarısız olursa **Tekrar dene**'yi seçin.
+
+Arnold DW'yi Başlat menüsünden veya kurulum sırasında oluşturulan kısayoldan açın. Ana ekranda YouTube ve Instagram ekranlarından birini seçin.
 
 ## YouTube videosu indirme
 

@@ -21,7 +21,6 @@ class Platform(StrEnum):
     YOUTUBE_CHANNEL = "youtube_channel"
     INSTAGRAM_POST = "instagram_post"
     INSTAGRAM_PROFILE = "instagram_profile"
-    TIKTOK = "tiktok"
     GENERIC = "generic"
     UNKNOWN = "unknown"
 
@@ -30,7 +29,6 @@ class MediaKind(StrEnum):
     VIDEO = "video"
     AUDIO = "audio"
     IMAGE = "image"
-    SLIDESHOW = "slideshow"
 
 
 def _enum(enum_cls, value, default):
@@ -47,7 +45,7 @@ def _known_kwargs(cls, data: dict) -> dict:
 
 @dataclass
 class MediaAsset:
-    """A directly downloadable file that belongs to an item (slideshow image, music track)."""
+    """A directly downloadable file that belongs to an item (an image, a music track)."""
 
     url: str
     kind: MediaKind = MediaKind.IMAGE
@@ -73,7 +71,7 @@ class MediaAsset:
 
 @dataclass
 class MediaItem:
-    """A single downloadable thing: a video, an audio track, an image or a photo slideshow."""
+    """A single downloadable thing: a video, an audio track or an image."""
 
     id: str
     url: str
@@ -252,7 +250,6 @@ class DownloadOptions:
     audio_quality: str = "192"  # kbps, only used for mp3
     filename_template: str = "%(title).150B [%(id)s].%(ext)s"
     ffmpeg_location: str | None = None
-    include_slideshow_audio: bool = True
     playlist_items: str | None = None  # yt-dlp syntax, e.g. "1,3-5"
 
     def to_dict(self) -> dict[str, Any]:
@@ -264,7 +261,6 @@ class DownloadOptions:
             "audio_quality": self.audio_quality,
             "filename_template": self.filename_template,
             "ffmpeg_location": self.ffmpeg_location,
-            "include_slideshow_audio": self.include_slideshow_audio,
             "playlist_items": self.playlist_items,
         }
 

@@ -8,9 +8,7 @@ from arnold_dw.core.platforms import ErrorCode, MediaItem, Platform, PlatformErr
 def calls(monkeypatch):
     seen = []
     monkeypatch.setattr(platforms.youtube_playlist, "open_playlist", lambda url, **kw: seen.append(("pl", url)))
-    monkeypatch.setattr(platforms.tiktok, "resolve", lambda url, **kw: seen.append(("tt", url)))
     monkeypatch.setattr(platforms.generic, "resolve", lambda url, **kw: seen.append(("gen", url)))
-    monkeypatch.setattr(platforms.tiktok, "download", lambda t, o, **kw: seen.append(("tt-dl", t)) or ["f"])
     monkeypatch.setattr(platforms.generic, "download", lambda t, o, **kw: seen.append(("gen-dl", t)) or ["f"])
     return seen
 
@@ -20,7 +18,6 @@ def calls(monkeypatch):
     [
         ("https://www.youtube.com/playlist?list=PL590L5WQmH8fJ54F369BLDSqIwcs-TCfs", "pl"),
         ("https://www.youtube.com/@NASA", "pl"),
-        ("https://www.tiktok.com/@natgeo/photo/7680195684426927373", "tt"),
         ("https://www.youtube.com/watch?v=dQw4w9WgXcQ", "gen"),
         ("https://clips.twitch.tv/FaintLightGullWholeWheat", "gen"),
     ],
@@ -47,8 +44,8 @@ def test_resolve_rejections(calls, text, code):
 
 def test_download_dispatch(calls):
     opts = platforms.DownloadOptions(output_dir="out")
-    platforms.download(MediaItem(id="1", url="u", platform=Platform.TIKTOK), opts)
+    platforms.download(MediaItem(id="1", url="u", platform=Platform.YOUTUBE), opts)
     platforms.download("https://clips.twitch.tv/FaintLightGullWholeWheat", opts)
-    assert [c[0] for c in calls] == ["tt-dl", "gen-dl"]
+    assert [c[0] for c in calls] == ["gen-dl", "gen-dl"]
     with pytest.raises(PlatformError):
         platforms.download(MediaItem(id="1", url="u", platform=Platform.INSTAGRAM_POST), opts)

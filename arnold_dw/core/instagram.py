@@ -33,7 +33,6 @@ import instaloader
 import requests
 import yt_dlp
 
-from arnold_dw import paths
 from arnold_dw.core import filenames, http
 from arnold_dw.core.errors import (
     DownloadCancelled,
@@ -288,7 +287,9 @@ def _check_cancel(cancel_event):
 
 
 def _ffmpeg_location():
-    return paths.FFMPEG_PATH if os.path.isfile(paths.FFMPEG_PATH) else None
+    from arnold_dw.core.runtime import components
+
+    return components.executable("ffmpeg")
 
 
 # --------------------------------------------------------------------------

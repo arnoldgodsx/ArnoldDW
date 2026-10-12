@@ -1,7 +1,6 @@
 [CmdletBinding()]
 param(
     [string]$Python = $(if ($env:ARNOLD_PY) { $env:ARNOLD_PY } else { ".\.venv\Scripts\python.exe" }),
-    [switch]$ForceBinaries,
     # Fail instead of warning when Inno Setup is missing (release and CI builds).
     [switch]$RequireInstaller,
     # Also produce the portable ArnoldDW-<version>-win64.zip.
@@ -21,11 +20,6 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "Could not read arnold_dw.__version__." }
     $version = ($versionOutput | Select-Object -Last 1).Trim()
     if (-not $version -or $version -notmatch '^[0-9A-Za-z.+!-]+$') { throw "Invalid application version: $version" }
-
-    $fetchArgs = @((Join-Path $repoRoot "tools/fetch_binaries.py"))
-    if ($ForceBinaries) { $fetchArgs += "--force" }
-    & $pythonPath @fetchArgs
-    if ($LASTEXITCODE -ne 0) { throw "Fetching runtime binaries failed." }
 
     & $pythonPath -m PyInstaller --noconfirm --distpath $distPath --workpath (Join-Path $repoRoot "build") (Join-Path $repoRoot "packaging/ArnoldDW.spec")
     if ($LASTEXITCODE -ne 0) { throw "PyInstaller build failed." }

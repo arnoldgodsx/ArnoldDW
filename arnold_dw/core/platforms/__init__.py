@@ -1,4 +1,4 @@
-"""Platform engines: link detection, TikTok, generic yt-dlp sites and YouTube playlists.
+"""Platform engines: link detection, generic yt-dlp sites and YouTube playlists.
 
 UI-free. Every network function is synchronous and blocking - call it from a
 worker thread. Cancellation uses a ``threading.Event``; progress is reported
@@ -14,7 +14,7 @@ Typical flow::
 
 from __future__ import annotations
 
-from . import generic, tiktok, youtube_playlist
+from . import generic, youtube_playlist
 from .errors import DownloadCancelled, ErrorCode, PlatformError
 from .models import (
     Collection,
@@ -27,12 +27,12 @@ from .models import (
     ResolveResult,
     result_from_dict,
 )
-from .router import Detection, analyze, analyze_online, detect, extract_url, resolve_short_link, warm_up
+from .router import Detection, analyze, detect, extract_url, warm_up
 
 __all__ = [
     "Collection", "Detection", "DownloadCancelled", "DownloadOptions", "ErrorCode", "MediaAsset", "MediaItem",
-    "MediaKind", "Platform", "PlatformError", "Progress", "ResolveResult", "analyze", "analyze_online", "detect",
-    "download", "extract_url", "resolve", "resolve_short_link", "result_from_dict", "warm_up",
+    "MediaKind", "Platform", "PlatformError", "Progress", "ResolveResult", "analyze", "detect",
+    "download", "extract_url", "resolve", "result_from_dict", "warm_up",
 ]
 
 
@@ -42,11 +42,9 @@ def resolve(text: str, *, cancel_event=None) -> ResolveResult:
     Instagram links are handled by ``core.instagram`` and raise ``UNSUPPORTED`` here.
     Single YouTube videos resolve through yt-dlp like any generic site.
     """
-    det = analyze_online(text)
+    det = analyze(text)
     if det.platform in (Platform.YOUTUBE_PLAYLIST, Platform.YOUTUBE_CHANNEL):
         return youtube_playlist.open_playlist(det.url, cancel_event=cancel_event)
-    if det.platform is Platform.TIKTOK:
-        return tiktok.resolve(det.url, cancel_event=cancel_event)
     if det.platform in (Platform.YOUTUBE, Platform.GENERIC):
         return generic.resolve(det.url, cancel_event=cancel_event)
     if det.platform in (Platform.INSTAGRAM_POST, Platform.INSTAGRAM_PROFILE):
@@ -57,8 +55,6 @@ def resolve(text: str, *, cancel_event=None) -> ResolveResult:
 def download(target: MediaItem | str, options: DownloadOptions, *, cancel_event=None, progress=None) -> list[str]:
     """Download a resolved MediaItem (or a link) with the matching engine. Returns file paths. Blocking."""
     platform = target.platform if isinstance(target, MediaItem) else analyze(target).platform
-    if platform is Platform.TIKTOK:
-        return tiktok.download(target, options, cancel_event=cancel_event, progress=progress)
     if platform in (Platform.YOUTUBE, Platform.GENERIC):
         return generic.download(target, options, cancel_event=cancel_event, progress=progress)
     raise PlatformError(ErrorCode.UNSUPPORTED, f"no download engine for {platform}")

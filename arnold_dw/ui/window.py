@@ -13,10 +13,12 @@ from arnold_dw.config import load_settings, save_settings
 from arnold_dw.core.history import History
 from arnold_dw.core.jobs import DownloadManager
 from arnold_dw.core.runners import default_runners
+from arnold_dw.core.runtime import components
 from arnold_dw.ui.screens.downloads import DownloadsScreen
 from arnold_dw.ui.screens.home import HomeScreen
 from arnold_dw.ui.screens.instagram import InstagramScreen
 from arnold_dw.ui.screens.settings import SettingsScreen
+from arnold_dw.ui.screens.setup import SetupScreen
 from arnold_dw.ui.screens.youtube import YouTubeScreen
 from arnold_dw.ui.theme import APP_HEIGHT, APP_WIDTH, BG, SCREEN_PADX, SCREEN_PADY
 from arnold_dw.ui.widgets.navbar import NavBar
@@ -32,6 +34,7 @@ SCREENS = {
     "instagram": InstagramScreen,
     "downloads": DownloadsScreen,
     "settings": SettingsScreen,
+    "setup": SetupScreen,
 }
 
 POLL_INTERVAL_MS = 60
@@ -61,8 +64,12 @@ class ArnoldDW(ctk.CTk):
 
         self._configure_window()
         self.navbar = NavBar(self)
-        self.navbar.pack(side="bottom", fill="x")
-        self.show_screen("home")
+        if components.missing():
+            # First launch: download ffmpeg/Deno before anything else (no navigation yet).
+            self.show_screen("setup")
+        else:
+            self.navbar.pack(side="bottom", fill="x")
+            self.show_screen("home")
         self._apply_dark_titlebar()
         self._tag_instance_window()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -163,6 +170,11 @@ class ArnoldDW(ctk.CTk):
         self.navbar.refresh_badges()
         screen.on_show()
         log.debug("Screen: %s", name)
+
+    def finish_setup(self):
+        """The setup screen installed every component: continue to the app."""
+        self.navbar.pack(side="bottom", fill="x")
+        self.show_screen("home")
 
     # Kept for UI automation scripts (hq/tools/snap.py --script).
     def _show_home(self):

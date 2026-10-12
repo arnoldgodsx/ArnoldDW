@@ -6,8 +6,8 @@ many formats go missing. The solver scripts come from the ``yt-dlp-ejs`` Python 
 (bundled with the app, pinned to the version yt-dlp expects), so the runtime only has to
 execute them - no network access is needed.
 
-Search order (first usable wins): runtimes shipped in ``bin/`` (the installer ships
-``deno.exe``), then deno / node / bun found on PATH. The order within each group follows
+Search order (first usable wins): runtimes in ``bin/`` (source checkout) or downloaded on
+first launch (``core.runtime.components``), then deno / node / bun found on PATH. The order within each group follows
 yt-dlp's own priority. QuickJS is deliberately not used: it is supported by yt-dlp but
 takes tens of seconds per video.
 """
@@ -23,7 +23,7 @@ import subprocess
 import sys
 from dataclasses import dataclass
 
-from . import _env
+from . import _env, components
 from .versioning import meets_minimum
 
 log = logging.getLogger(__name__)
@@ -86,13 +86,12 @@ def _probe_version(tool: str, path: str) -> str | None:
 
 
 def _bundled(name: str) -> str | None:
-    path = os.path.join(_env.bin_dir(), _env.exe_name(name))
-    return path if os.path.isfile(path) else None
+    return components.executable(name)
 
 
 @functools.cache
 def ffmpeg_path() -> str | None:
-    """Bundled ``bin/ffmpeg.exe``, otherwise ffmpeg on PATH, otherwise ``None``."""
+    """App-provided ffmpeg (``bin/`` or the downloaded component), else ffmpeg on PATH, else ``None``."""
     path = _bundled("ffmpeg") or shutil.which("ffmpeg")
     if path is None:
         log.warning("ffmpeg not found (neither bundled nor on PATH)")

@@ -2,7 +2,9 @@
 
 ## Open the app
 
-Open Arnold DW from the Start menu or the shortcut created during installation. Choose YouTube or Instagram on the home screen. The TikTok card does not currently provide a working download flow.
+On the very first launch Arnold DW shows a setup screen that downloads FFmpeg and Deno (about 71 MB, only once). Keep the app open until it shows **Hazır!**; if the download fails, select **Tekrar dene**.
+
+Open Arnold DW from the Start menu or the shortcut created during installation. Choose YouTube or Instagram on the home screen.
 
 ## Download a YouTube video
 

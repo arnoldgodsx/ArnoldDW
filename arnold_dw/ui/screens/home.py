@@ -31,12 +31,10 @@ class PlatformCard:
     screen: str  # name of the screen it opens (see ui.window.SCREENS)
 
 
-# Only cards whose screen is registered in ui.window.SCREENS are shown: a card that
-# opens nothing would be a dead control (TikTok's engine exists, its screen doesn't yet).
+# Only cards whose screen is registered in ui.window.SCREENS are shown.
 PLATFORMS = (
     PlatformCard("YouTube", paths.YOUTUBE_LOGO_PATH, "youtube"),
     PlatformCard("Instagram", paths.INSTAGRAM_LOGO_PATH, "instagram"),
-    PlatformCard("TikTok", paths.TIKTOK_LOGO_PATH, "tiktok"),
 )
 
 
