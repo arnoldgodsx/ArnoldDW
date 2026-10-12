@@ -39,3 +39,9 @@ Ana ekrandaki dişli düğmesiyle **Ayarlar** ekranını açıp **İndirme motor
 ## English
 
 See the [English FAQ and troubleshooting guide](en/faq.md).
+
+## Arnold DW'yi nasıl kaldırırım?
+
+**Ayarlar → Uygulamalar → Yüklü uygulamalar** (veya **Denetim Masası → Programlar ve Özellikler**) içinde **Arnold DW**'yi bulup **Kaldır**'ı seçin. Başlat menüsündeki Arnold DW klasöründe bulunan **Arnold DW'yi kaldır** kısayolunu da kullanabilirsiniz. Uygulama açıksa kaldırıcı onu kapatmayı önerir. Ardından `%APPDATA%\Arnold DW` içindeki ayarlar, indirme geçmişi, günlükler ve motor güncellemelerinin silinip silinmeyeceğini sorar; yeniden kurulumda kullanmak için **Hayır** deyin. İndirdiğiniz dosyalar hiçbir zaman silinmez.
+
+Komut satırından kaldırmak için kurulum klasöründe `unins000.exe /VERYSILENT /SUPPRESSMSGBOXES` çalıştırın; kullanıcı verileri korunur.

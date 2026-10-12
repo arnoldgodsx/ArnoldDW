@@ -39,3 +39,9 @@ TikTok downloads are not currently supported by the app.
 ## Language
 
 [Türkçe sık sorulan sorular](../sss.md) · [English FAQ](faq.md)
+
+## How do I uninstall Arnold DW?
+
+Open **Settings → Apps → Installed apps** (or **Control Panel → Programs and Features**), find **Arnold DW** and select **Uninstall**. You can also use **Uninstall Arnold DW** in the Start menu's Arnold DW folder. If the app is running, the uninstaller offers to close it. It then asks whether to delete your settings, download history, logs and engine updates in `%APPDATA%\Arnold DW`; answer **No** to keep them for a later reinstall. Your downloaded files are never deleted.
+
+For scripted removal, run `unins000.exe /VERYSILENT /SUPPRESSMSGBOXES` from the install folder; user data is kept.

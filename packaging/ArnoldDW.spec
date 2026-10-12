@@ -74,7 +74,11 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter.test", "mutagen"],
+    # Build/test tooling and heavy optional packages yt-dlp can import but the app never uses.
+    excludes=[
+        "tkinter.test", "mutagen", "pytest", "_pytest", "pip", "setuptools", "pkg_resources",
+        "PyInstaller", "ruff", "IPython", "numpy", "matplotlib", "pandas", "lib2to3", "pydoc_data",
+    ],
     noarchive=False,
     optimize=0,
 )
@@ -88,7 +92,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
@@ -103,7 +107,7 @@ coll = COLLECT(
     a.binaries,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     name="Arnold DW",
 )

@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
     [string]$Python = $(if ($env:ARNOLD_PY) { $env:ARNOLD_PY } else { ".\.venv\Scripts\python.exe" }),
-    [switch]$ForceBinaries
+    [switch]$ForceBinaries,
+    # Fail instead of warning when Inno Setup is missing (release and CI builds).
+    [switch]$RequireInstaller
 )
 
 $ErrorActionPreference = "Stop"
@@ -49,11 +51,20 @@ try {
 
     if ($iscc) {
         $installerScript = Join-Path $repoRoot "packaging/installer.iss"
-        & $iscc "/DAppVersion=$version" "/DSourceDir=$appDirectory" "/DOutputDir=$distPath" $installerScript
+        # The wizard's agreement page shows the disclaimer. Inno Setup reads plain-text
+        # files as UTF-8 only with a BOM, so write a BOM'd copy for the Turkish text.
+        $licenseFile = Join-Path $repoRoot "build/LICENSE-AGREEMENT.txt"
+        New-Item -ItemType Directory -Force -Path (Split-Path $licenseFile) | Out-Null
+        $disclaimer = Get-Content -Raw -Encoding UTF8 (Join-Path $repoRoot "DISCLAIMER.md")
+        [IO.File]::WriteAllText($licenseFile, $disclaimer, (New-Object Text.UTF8Encoding $true))
+        & $iscc "/Qp" "/DAppVersion=$version" "/DSourceDir=$appDirectory" "/DOutputDir=$distPath" "/DLicenseFile=$licenseFile" $installerScript
         if ($LASTEXITCODE -ne 0) { throw "Inno Setup compilation failed." }
         $setupPath = Join-Path $distPath "ArnoldDW-$version-setup.exe"
         if (-not (Test-Path -LiteralPath $setupPath)) { throw "Inno Setup output not found: $setupPath" }
         $setupSize = (Get-Item -LiteralPath $setupPath).Length
+    }
+    elseif ($RequireInstaller) {
+        throw "Inno Setup 6 (ISCC.exe) was not found; install it or drop -RequireInstaller."
     }
     else {
         Write-Warning "Inno Setup 6 was not found; portable ZIP was built, installer skipped."

@@ -28,22 +28,22 @@ jobs:
       - name: Set up Deno
         uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
-          deno-version: v2.5.6
+          deno-version: v2.9.7
 
-      - name: Resolve ffmpeg cache key
-        id: ffmpeg
+      - name: Resolve runtime binary cache key
+        id: runtime
         shell: pwsh
         run: |
           $content = Get-Content -Raw tools/fetch_binaries.py
-          $match = [regex]::Match($content, '"binary_sha256":\s*"([a-f0-9]{64})"')
-          if (-not $match.Success) { throw "Could not read pinned ffmpeg SHA-256" }
-          "hash=$($match.Groups[1].Value)" >> $env:GITHUB_OUTPUT
+          $hashes = [regex]::Matches($content, '"archive_sha256":\s*"([a-f0-9]{64})"') | ForEach-Object { $_.Groups[1].Value }
+          if ($hashes.Count -lt 2) { throw "Could not read pinned runtime archive SHA-256 values" }
+          "hash=$($hashes -join '-')" >> $env:GITHUB_OUTPUT
 
-      - name: Cache verified ffmpeg
+      - name: Cache verified runtime binaries
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: bin/ffmpeg.exe
-          key: ffmpeg-${{ steps.ffmpeg.outputs.hash }}
+          path: bin
+          key: runtime-${{ steps.runtime.outputs.hash }}
 
       - name: Install dependencies
         run: python -m pip install -r requirements.txt -r requirements-dev.txt
