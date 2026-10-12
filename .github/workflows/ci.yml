@@ -51,21 +51,6 @@ jobs:
             requirements.txt
             requirements-dev.txt
 
-      - name: Resolve runtime binary cache key
-        id: runtime
-        shell: pwsh
-        run: |
-          $content = Get-Content -Raw tools/fetch_binaries.py
-          $hashes = [regex]::Matches($content, '"archive_sha256":\s*"([a-f0-9]{64})"') | ForEach-Object { $_.Groups[1].Value }
-          if ($hashes.Count -lt 2) { throw "Could not read pinned runtime archive SHA-256 values" }
-          "hash=$($hashes -join '-')" >> $env:GITHUB_OUTPUT
-
-      - name: Cache verified runtime binaries
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: bin
-          key: runtime-${{ steps.runtime.outputs.hash }}
-
       - name: Install dependencies
         run: python -m pip install -r requirements.txt -r requirements-dev.txt
 

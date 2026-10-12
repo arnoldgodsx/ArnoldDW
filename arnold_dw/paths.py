@@ -19,7 +19,6 @@ APP_LOGO_PATH = resource_path("logo", "app-logo.png")
 YOUTUBE_LOGO_PATH = resource_path("logo", "youtube.png")
 INSTAGRAM_LOGO_PATH = resource_path("logo", "instagram.png")
 BACK_ICON_PATH = resource_path("logo", "back.png")
-FFMPEG_PATH = resource_path("bin", "ffmpeg.exe")
 
 
 def config_dir():

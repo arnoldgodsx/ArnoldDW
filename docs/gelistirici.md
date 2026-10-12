@@ -45,6 +45,12 @@ UI metnini `from arnold_dw.i18n import t` ile alıp `t("anahtar", name=value)` �
 
 PyInstaller paketine katalogları eklemek için `ArnoldDW.spec` içindeki `datas` listesine şu satırı ekleyin: `datas += [(str(path), "arnold_dw/i18n") for path in (ROOT / "arnold_dw" / "i18n").glob("*.json")]`.
 
+## İlk açılış bileşenleri (ffmpeg, Deno)
+
+Kurucu ffmpeg ve Deno'yu içermez. `arnold_dw/core/runtime/components.py` her bileşenin sürümünü ve çıkarılan her dosyanın SHA-256 değerini sabitler; `ui/screens/setup.py` eksik bileşen varsa ana ekrandan önce açılır ve bunları `%LOCALAPPDATA%\Arnold DW\runtime\<bileşen>` altına indirir. Kaynak sırası: `runtime-binaries` sürümündeki xz paketi (`tools/build_runtime_packs.py`, yayın akışı üretir), resmî kaynak arşivi, bu arşivin aynası. Kaynak koddan çalıştırırken `python tools/fetch_binaries.py` araçları `bin/` altına koyar ve kurulum ekranı atlanır. Komut satırından kurulum: `"Arnold DW.exe" --install-components`.
+
+Bileşen sürümü değiştirmek için `components.py` içindeki URL/hash değerlerini güncelleyin; sonraki yayın yeni paketleri üretir ve yükler.
+
 ## Güncelleme ve tanılama
 
 ### yt-dlp motoru

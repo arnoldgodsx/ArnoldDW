@@ -102,6 +102,9 @@ Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchDescription}"; Flags: p
 [UninstallDelete]
 ; Anything the app may have created next to itself (e.g. Python byte-code caches).
 Type: filesandordirs; Name: "{app}\_internal"
+; ffmpeg and Deno, downloaded by the app on first launch (program files, not user data).
+Type: filesandordirs; Name: "{localappdata}\{#AppName}\runtime"
+Type: dirifempty; Name: "{localappdata}\{#AppName}"
 Type: dirifempty; Name: "{app}"
 
 [Code]

@@ -18,12 +18,19 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from arnold_dw.core.runtime.components import DENO, FFMPEG, RELEASE_BASE_URL  # noqa: E402
+
+# The pinned versions and hashes live in arnold_dw.core.runtime.components (the app downloads
+# the same files on first launch); this script fetches them into bin/ for source runs.
 TOOLS: dict[str, dict[str, Any]] = {
     "ffmpeg": {
-        "version": "9.0.2-27-g7e93014c5b (LGPL shared, autobuild-2026-10-12-13-12)",
-        "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-12-13-12/ffmpeg-n9.0.2-27-g7e93014c5b-win64-lgpl-shared-9.0.zip",
-        "archive_sha256": "de3f3b16b3dbf2038a56878aa35795f48bd220f01479697e008470773cecba5b",
-        "max_archive_bytes": 120_000_000,
+        "version": f"{FFMPEG.version} (LGPL shared)",
+        "url": FFMPEG.sources[1].url,
+        "archive_sha256": FFMPEG.sources[1].sha256,
+        "max_archive_bytes": FFMPEG.sources[1].max_bytes,
         "archive_member": "bin/ffmpeg.exe",
         "destination_dir": "bin",
         "include_bin_files": True,
@@ -31,36 +38,24 @@ TOOLS: dict[str, dict[str, Any]] = {
         "version_check": "ffmpeg version",
         "configuration_check": "--enable-shared",
         "forbidden_configuration": "--enable-gpl",
-        "output_sha256": {
-            "ffmpeg.exe": "1f1334bab3fd4c8086b01dd1f618f2a3a453dfa39429b3a65a13b40502a194e3",
-            "ffprobe.exe": "19cfb4211cc00c19591058ab06cd171eeec1dadc5296207e6f6d3414232380a5",
-            "avcodec-63.dll": "501c1abd17650647ac829f72c5aa24379eb80e47c001163900da64cec36d68c6",
-            "avdevice-63.dll": "33cd7781840597b09b68acb2d75491571ce238f4fcb83465942e6989df12374f",
-            "avfilter-12.dll": "3541c6d1af33ae7919dfe945ed5e81fffd50741d948e535d9f0013935fc26d75",
-            "avformat-63.dll": "4a598e944123550f3b4f09f5635dd6cf7b2c8b083ac21e2192e1a6290077ebef",
-            "avutil-61.dll": "bf15dba19fcc23ba4a79faabae11705e8db0e8647a2003d7efdb0075fa9536c2",
-            "swresample-7.dll": "6f1033a18a11358d6665bf80d07b57ff63efe8529e5cc8e73d49b07ddfc3fbe7",
-            "swscale-10.dll": "fb7562f214f93743962bbb7879577b11bc8b52a589027fd220e14237b7d0c133",
-        },
+        "output_sha256": dict(FFMPEG.files),
     },
     "deno": {
-        "version": "2.9.7",
-        "url": "https://github.com/denoland/deno/releases/download/v2.9.7/deno-x86_64-pc-windows-msvc.zip",
-        "archive_sha256": "a0c3101b4158d1dfb7d6a78a7bf0f3de80c96bb423c152beec8beb22786f2238",
-        "max_archive_bytes": 60_000_000,
+        "version": DENO.version,
+        "url": DENO.sources[1].url,
+        "archive_sha256": DENO.sources[1].sha256,
+        "max_archive_bytes": DENO.sources[1].max_bytes,
         "archive_member": "deno.exe",
         "destination_dir": "bin",
         "destination_name": "deno.exe",
         "version_args": ["--version"],
-        "version_check": "deno 2.9.7",
-        "output_sha256": {
-            "deno.exe": "e020f3e232bd16e33768dee528e5983349c962952051ced0a5d58ad42f5d9b33",
-        },
+        "version_check": f"deno {DENO.version}",
+        "output_sha256": dict(DENO.files),
     },
 }
 # Upstream autobuilds (BtbN) are pruned after a few weeks. The release workflow copies
 # each verified archive to this release so pinned builds stay reproducible.
-MIRROR_BASE_URL = "https://github.com/arnoldgodsx/ArnoldDW/releases/download/runtime-binaries/"
+MIRROR_BASE_URL = RELEASE_BASE_URL
 CHUNK_SIZE = 1024 * 1024
 ALLOWED_DOWNLOAD_HOSTS = frozenset({"github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"})
 

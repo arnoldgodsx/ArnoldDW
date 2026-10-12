@@ -39,25 +39,26 @@ jobs:
       - name: Install Inno Setup 6
         run: choco install innosetup --no-progress -y
 
-      - name: Fetch pinned runtime binaries and mirror their archives
+      - name: Build and publish the first-launch runtime packs
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python tools/fetch_binaries.py --archive-dir build/runtime-archives
-          if ($LASTEXITCODE -ne 0) { throw "Fetching runtime binaries failed." }
-          # Upstream FFmpeg autobuilds are pruned after a few weeks; keep the exact verified
-          # archives on a prerelease so tools/fetch_binaries.py can fall back to them.
+          # The app downloads ffmpeg and Deno on first launch from the runtime-binaries
+          # prerelease: compact xz packs first, the verified upstream archives as fallback
+          # (upstream FFmpeg autobuilds are pruned after a few weeks).
+          python tools/build_runtime_packs.py --out dist/runtime-packs --archive-dir build/runtime-archives
+          if ($LASTEXITCODE -ne 0) { throw "Building runtime packs failed." }
           gh release view runtime-binaries *> $null
           if ($LASTEXITCODE -ne 0) {
             gh release create runtime-binaries --prerelease --latest=false `
-              --title "Runtime binaries (build mirror)" `
-              --notes "SHA-256-pinned ffmpeg and Deno archives used by tools/fetch_binaries.py. Not an app release."
+              --title "Runtime binaries (first-launch downloads)" `
+              --notes "ffmpeg and Deno downloaded by Arnold DW on first launch. Every file is SHA-256 pinned in arnold_dw/core/runtime/components.py. Not an app release."
             if ($LASTEXITCODE -ne 0) { throw "Could not create the runtime-binaries release." }
           }
-          $archives = (Get-ChildItem build/runtime-archives -File).FullName
-          gh release upload runtime-binaries @archives --clobber
-          if ($LASTEXITCODE -ne 0) { throw "Mirroring runtime archives failed." }
+          $assets = @((Get-ChildItem dist/runtime-packs -File).FullName) + @((Get-ChildItem build/runtime-archives -File).FullName)
+          gh release upload runtime-binaries @assets --clobber
+          if ($LASTEXITCODE -ne 0) { throw "Uploading runtime packs failed." }
 
       - name: Build release artifacts
         shell: pwsh

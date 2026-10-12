@@ -21,15 +21,16 @@ Arnold DW yalnızca YouTube ve Instagram'a odaklanır; diğer siteler uygulamada
 
 Gereksinim: Windows 10 veya 11 (64 bit).
 
-1. [GitHub Releases](https://github.com/arnoldgodsx/ArnoldDW/releases/latest) sayfasından `ArnoldDW-1.0.0-setup.exe` dosyasını indirin (her şeyi içeren tek dosya, yaklaşık 90 MB).
+1. [GitHub Releases](https://github.com/arnoldgodsx/ArnoldDW/releases/latest) sayfasından `ArnoldDW-<sürüm>-setup.exe` dosyasını indirin (tek ve küçük bir dosya).
 2. Çalıştırın. SmartScreen "Bilinmeyen yayıncı" uyarısı verirse (kurucu kod imzalı değildir) **Daha fazla bilgi → Yine de çalıştır**'ı seçin.
 3. Sihirbazı izleyin: dil → kurulum kapsamı (tüm kullanıcılar / yalnızca ben) → kullanım koşulları → kurulum klasörü → isteğe bağlı masaüstü kısayolu → kur.
+4. **İlk açılış:** Uygulama, gerekli iki yardımcı aracı — FFmpeg (video/ses birleştirme, MP3) ve Deno (YouTube'da tüm kaliteler) — ilerleme ve hız göstererek bir kez indirir (~71 MB). Bağlantı koparsa **Tekrar dene**'ye basın.
 
 Yeni sürümü kurmak için kurucuyu yeniden çalıştırmanız yeterlidir; ayarlarınız ve geçmişiniz korunur.
 
 ## Kaldırma
 
-**Ayarlar → Uygulamalar → Yüklü uygulamalar** içinde **Arnold DW → Kaldır**'ı veya Başlat menüsündeki **Arnold DW'yi kaldır** kısayolunu kullanın. Kaldırıcı açık uygulamayı kapatır ve `%APPDATA%\Arnold DW` içindeki ayar/geçmiş verilerinin silinip silinmeyeceğini sorar. İndirdiğiniz dosyalara dokunulmaz.
+**Ayarlar → Uygulamalar → Yüklü uygulamalar** içinde **Arnold DW → Kaldır**'ı veya Başlat menüsündeki **Arnold DW'yi kaldır** kısayolunu kullanın. Kaldırıcı açık uygulamayı kapatır, indirilen FFmpeg/Deno'yu siler ve `%APPDATA%\Arnold DW` içindeki ayar/geçmiş verilerinin silinip silinmeyeceğini sorar. İndirdiğiniz dosyalara dokunulmaz.
 
 ## Geliştirici kurulumu
 

@@ -57,16 +57,8 @@ version_info = VSVersionInfo(
 )
 
 datas = [(str(ROOT / "logo"), "logo")]
-# ffmpeg/ffprobe DLLs and deno.exe go straight into COLLECT as plain files. Passed through
-# Analysis they are reclassified as binaries and their DLL dependencies are copied a second
-# time into _internal/, which doubled the ffmpeg footprint.
-runtime_files = [
-    (f"bin/{path.name}", str(path), "DATA")
-    for path in sorted((ROOT / "bin").iterdir())
-    if path.is_file() and path.suffix.lower() in {".exe", ".dll"}
-]
-if not any(name == "bin/ffmpeg.exe" for name, _, _ in runtime_files):
-    raise SystemExit("bin/ffmpeg.exe is missing: run tools/fetch_binaries.py first")
+# ffmpeg and Deno are not bundled: the app downloads them on first launch
+# (arnold_dw.core.runtime.components), which keeps the installer small.
 datas += [(str(ROOT / "THIRD_PARTY_NOTICES.md"), "."), (str(ROOT / "licenses"), "licenses")]
 binaries = []
 hiddenimports = collect_submodules("yt_dlp")
@@ -120,7 +112,7 @@ exe = EXE(
 coll = COLLECT(
     exe,
     a.binaries,
-    a.datas + runtime_files,
+    a.datas,
     strip=False,
     upx=False,
     upx_exclude=[],
