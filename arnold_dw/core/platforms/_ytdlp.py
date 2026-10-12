@@ -111,7 +111,7 @@ def is_video_format(fmt: dict) -> bool:
 def resolution_rung(fmt: dict) -> int | None:
     """Quality rung of a format as users know it ("1080p"): the shorter side of the frame.
 
-    A portrait 1080x1920 TikTok is "1080p", same as a landscape 1920x1080 video.
+    A portrait 1080x1920 Short is "1080p", same as a landscape 1920x1080 video.
     """
     width, height = fmt.get("width"), fmt.get("height")
     if width and height:
@@ -188,7 +188,7 @@ def video_format(video_filter: str = "") -> str:
 def format_sort(max_height: int | None = None, *, codec_first: bool = False) -> list[str]:
     """yt-dlp ``format_sort`` keys: resolution cap (see ``resolution_sort``) + H.264/AAC
     preference for compatibility. With ``codec_first`` an H.264 stream wins even over a
-    sharper H.265/VP9/AV1 one - used where the higher rungs are H.265 only (TikTok).
+    sharper H.265/VP9/AV1 one - used where the higher rungs are H.265 only.
     """
     res = resolution_sort(max_height)[0]
     keys = [res, "vcodec:h264", "acodec:aac"]
@@ -215,7 +215,7 @@ _NAME_OVERHEAD = 90
 def fit_template(output_dir: str, template: str) -> str:
     """Shrink ``%(title).NB`` so the final path stays under Windows' 260-character limit.
 
-    Long titles (tweets, TikTok captions) in a deep folder otherwise fail with
+    Long titles (tweets, long captions) in a deep folder otherwise fail with
     "No such file or directory" on systems without long-path support.
     """
     budget = WINDOWS_MAX_PATH - len(os.path.abspath(output_dir)) - 1 - _NAME_OVERHEAD

@@ -13,7 +13,6 @@ from arnold_dw.ui.theme import ERROR, SUCCESS, TEXT_FAINT, TEXT_MUTED
 PLATFORMS = {
     "youtube": ("YouTube", paths.YOUTUBE_LOGO_PATH),
     "instagram": ("Instagram", paths.INSTAGRAM_LOGO_PATH),
-    "tiktok": ("TikTok", paths.TIKTOK_LOGO_PATH),
 }
 
 

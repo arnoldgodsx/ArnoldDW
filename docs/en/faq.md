@@ -32,10 +32,6 @@ Open **Settings** using the gear button on the home screen. Under **Download**, 
 
 After installing an engine update, restart Arnold DW to activate it. If a download is active, the app asks for confirmation before restarting because active downloads will be canceled. To abandon an available update without installing it, select **Dismiss** in Settings.
 
-## Why does TikTok not open?
-
-TikTok downloads are not currently supported by the app.
-
 ## Language
 
 [Türkçe sık sorulan sorular](../sss.md) · [English FAQ](faq.md)

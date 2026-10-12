@@ -2,7 +2,7 @@
 
 ## Uygulamayı açma
 
-Arnold DW'yi Başlat menüsünden veya kurulum sırasında oluşturulan kısayoldan açın. Ana ekranda YouTube ve Instagram ekranlarından birini seçin. Ana ekrandaki TikTok kartı şu an çalışır bir indirme akışı sunmaz.
+Arnold DW'yi Başlat menüsünden veya kurulum sırasında oluşturulan kısayoldan açın. Ana ekranda YouTube ve Instagram ekranlarından birini seçin.
 
 ## YouTube videosu indirme
 

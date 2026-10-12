@@ -14,7 +14,6 @@ from enum import StrEnum
 class ErrorCode(StrEnum):
     INVALID_LINK = "invalid_link"
     UNSUPPORTED = "unsupported"
-    EXPIRED_LINK = "expired_link"
     NOT_FOUND = "not_found"
     PRIVATE = "private"
     LOGIN_REQUIRED = "login_required"
@@ -36,7 +35,6 @@ class ErrorCode(StrEnum):
 MESSAGES: dict[ErrorCode, str] = {
     ErrorCode.INVALID_LINK: "Bağlantı tanınmadı. Linki kontrol edin.",
     ErrorCode.UNSUPPORTED: "Bu site veya bağlantı türü desteklenmiyor.",
-    ErrorCode.EXPIRED_LINK: "Kısa bağlantı geçersiz veya süresi dolmuş. Uygulamadan linki yeniden kopyalayın.",
     ErrorCode.NOT_FOUND: "İçerik bulunamadı veya kaldırılmış.",
     ErrorCode.PRIVATE: "Bu içerik gizli, indirilemez.",
     ErrorCode.LOGIN_REQUIRED: "Bu içeriğe erişmek için giriş yapmak gerekiyor.",

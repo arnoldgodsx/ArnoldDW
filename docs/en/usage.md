@@ -2,7 +2,7 @@
 
 ## Open the app
 
-Open Arnold DW from the Start menu or the shortcut created during installation. Choose YouTube or Instagram on the home screen. The TikTok card does not currently provide a working download flow.
+Open Arnold DW from the Start menu or the shortcut created during installation. Choose YouTube or Instagram on the home screen.
 
 ## Download a YouTube video
 

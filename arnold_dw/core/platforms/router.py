@@ -2,9 +2,7 @@
 
 ``analyze(text)`` works offline: it pulls the first link out of whatever the
 user pasted (share texts, missing scheme, stray punctuation), classifies it and
-returns a canonical URL. TikTok short links (vm./vt./tiktok.com/t/) can only be
-expanded over the network, so they come back with ``needs_resolve=True``; use
-``analyze_online`` (or ``resolve_short_link``) from a worker thread for those.
+returns a canonical URL.
 """
 
 from __future__ import annotations
@@ -15,7 +13,6 @@ import re
 from dataclasses import dataclass
 from urllib.parse import parse_qs, urlsplit
 
-from .errors import ErrorCode, PlatformError, to_platform_error
 from .models import Platform
 
 log = logging.getLogger(__name__)
@@ -31,10 +28,9 @@ class Detection:
     platform: Platform
     url: str | None = None  # cleaned, canonical URL (None when no link was found)
     media_id: str | None = None  # video id / playlist id / shortcode / username / short code
-    subtype: str | None = None  # e.g. "shorts", "live", "music", "photo", "video", "short_link", channel tab
+    subtype: str | None = None  # e.g. "shorts", "live", "music", "p", "reel", channel tab
     playlist_url: str | None = None  # watch?v=..&list=.. -> the playlist, offered as an alternative
     extractor: str | None = None  # yt-dlp extractor key for GENERIC
-    needs_resolve: bool = False  # short link: call analyze_online()/resolve_short_link() first
 
     @property
     def supported(self) -> bool:
@@ -209,55 +205,6 @@ def _instagram(parts) -> Detection:
 
 
 # --------------------------------------------------------------------------
-# TikTok
-# --------------------------------------------------------------------------
-
-_TT_HOSTS = {"tiktok.com", "vm.tiktok.com", "vt.tiktok.com", "tiktokv.com"}
-_TT_ID = re.compile(r"\d{15,21}")
-_TT_SHORT_CODE = re.compile(r"[A-Za-z0-9_-]{5,20}")
-_TT_USER = re.compile(r"@[\w.-]{0,64}")
-
-
-def tiktok_url(video_id: str, user: str | None = None, photo: bool = False) -> str:
-    return f"https://www.tiktok.com/@{user or ''}/{'photo' if photo else 'video'}/{video_id}"
-
-
-def _tiktok(parts, host: str) -> Detection:
-    segs = _segments(parts.path)
-    code = short = None
-    if host in ("vm.tiktok.com", "vt.tiktok.com"):
-        code = segs[0] if segs else ""
-        short = f"https://{host}/{code}/"
-    elif segs and segs[0] == "t":
-        code = segs[1] if len(segs) > 1 else ""
-        short = f"https://www.tiktok.com/t/{code}/"
-    if code is not None:
-        if _TT_SHORT_CODE.fullmatch(code):
-            return Detection(Platform.TIKTOK, short, code, "short_link", needs_resolve=True)
-        return Detection(Platform.UNKNOWN, parts.geturl())
-
-    # /@user/video/ID, /@user/photo/ID
-    if len(segs) >= 3 and _TT_USER.fullmatch(segs[0]) and segs[1] in ("video", "photo") and _TT_ID.fullmatch(segs[2]):
-        user = segs[0][1:] or None
-        photo = segs[1] == "photo"
-        return Detection(Platform.TIKTOK, tiktok_url(segs[2], user, photo), segs[2], segs[1])
-    # m.tiktok.com/v/ID.html
-    if len(segs) == 2 and segs[0] == "v":
-        vid = segs[1].removesuffix(".html")
-        if _TT_ID.fullmatch(vid):
-            return Detection(Platform.TIKTOK, tiktok_url(vid), vid, "video")
-    # /embed/ID, /embed/v2/ID, /player/v1/ID, /share/video/ID
-    candidates = {
-        ("embed",): 1, ("embed", "v2"): 2, ("player", "v1"): 2, ("share", "video"): 2,
-    }
-    for prefix, idx in candidates.items():
-        if tuple(segs[: len(prefix)]) == prefix and len(segs) > idx and _TT_ID.fullmatch(segs[idx]):
-            return Detection(Platform.TIKTOK, tiktok_url(segs[idx]), segs[idx], "video")
-    # Profiles, sounds, tags, lives... are out of scope for now.
-    return Detection(Platform.UNKNOWN, parts.geturl())
-
-
-# --------------------------------------------------------------------------
 # Generic (any other yt-dlp supported site)
 # --------------------------------------------------------------------------
 
@@ -310,8 +257,6 @@ def analyze(text: str | None) -> Detection:
             return det
     elif host in _IG_HOSTS:
         return _instagram(parts)
-    elif host in _TT_HOSTS or host.endswith(".tiktok.com"):
-        return _tiktok(parts, host)
 
     key = find_extractor(url)
     if key:
@@ -321,36 +266,3 @@ def analyze(text: str | None) -> Detection:
 
 def detect(text: str | None) -> Platform:
     return analyze(text).platform
-
-
-def resolve_short_link(url: str, timeout: float = 10.0, session=None) -> str:
-    """Follow a short link's redirects and return the final URL (network; call from a worker thread).
-
-    Raises ``PlatformError(EXPIRED_LINK)`` when the short link lands on the site's home page,
-    which is what TikTok does for dead or malformed share links.
-    """
-    import requests
-
-    http = session or requests
-    try:
-        resp = http.get(url, headers={"User-Agent": USER_AGENT}, timeout=timeout, allow_redirects=True, stream=True)
-        final = resp.url
-        resp.close()
-    except Exception as exc:
-        raise to_platform_error(exc) from exc
-    path = urlsplit(final).path.strip("/")
-    if not path:
-        raise PlatformError(ErrorCode.EXPIRED_LINK, f"{url} -> {final}")
-    return final
-
-
-def analyze_online(text: str | None, timeout: float = 10.0, session=None) -> Detection:
-    """``analyze`` plus short-link expansion. May block on the network."""
-    det = analyze(text)
-    if not det.needs_resolve:
-        return det
-    final = resolve_short_link(det.url, timeout=timeout, session=session)
-    resolved = analyze(final)
-    if resolved.needs_resolve:  # redirect loop between short hosts
-        raise PlatformError(ErrorCode.EXPIRED_LINK, f"{det.url} -> {final}")
-    return resolved

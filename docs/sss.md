@@ -24,10 +24,6 @@ PyInstaller ile paketlenen uygulamalar bazı antivirüslerde yanlış pozitif uy
 
 YouTube ekranında **Gözat** ile mevcut bir klasör seçin. Uygulama seçimi hatırlar. YouTube dosya adı video başlığı ve kimliğine göre oluşturulur; Instagram dosyaları da kullanıcı adı, gönderi kısa kodu ve öğe sırasını içerir.
 
-## TikTok neden açılmıyor?
-
-TikTok indirme özelliği şu an çalışmıyor ve uygulama tarafından desteklenmiyor.
-
 ## Video kalitesi, kapak veya bilgi gömme seçeneklerini nereden değiştiririm?
 
 Ana ekrandaki dişli düğmesiyle **Ayarlar** ekranını açın. **İndirme** bölümünde **Maksimum uyumluluk (H.264)** veya **En yüksek kalite** modunu seçebilir, bilgi ve kapak görseli gömmeyi açıp kapatabilirsiniz. Bu seçenekler ffmpeg gerektirir; MP4'e kapak eklemek için ffprobe da gerekir. Gerekli araç yoksa Ayarlar ekranı bunu bildirir.

@@ -50,7 +50,7 @@ def _default_kind(extractor_key: str | None) -> MediaKind:
 
 def _platform_of(url: str) -> Platform:
     platform = analyze(url).platform
-    return platform if platform in (Platform.YOUTUBE, Platform.TIKTOK) else Platform.GENERIC
+    return platform if platform is Platform.YOUTUBE else Platform.GENERIC
 
 
 def _entry_converter(source_url: str, parent_extractor: str | None):

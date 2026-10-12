@@ -15,7 +15,7 @@ Arnold DW, YouTube ve Instagram içeriklerini Windows bilgisayarınıza indirmen
 - **Önizleme:** Kapak, başlık, kanal ve süre bilgisi.
 - **Ayarlar (⚙):** Kayıt klasörü, video modu, bilgi/kapak gömme, indirme motoru (yt-dlp) güncellemesi ve güncelleme kanalı, yardımcı araç durumu.
 
-TikTok, X, Reddit ve diğer siteler için indirme motoru hazır, ancak arayüz ekranları henüz yok; bu yüzden uygulamada sunulmuyor.
+Arnold DW yalnızca YouTube ve Instagram'a odaklanır; diğer siteler uygulamada sunulmaz.
 
 ## Kurulum
 

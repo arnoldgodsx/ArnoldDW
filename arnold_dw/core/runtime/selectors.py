@@ -53,7 +53,7 @@ def resolution_sort(max_height: int | None = None) -> list[str]:
     ``format_sort`` keys, since its selector has no codec filters of its own).
 
     A hard ``[height<=N]`` filter (the old approach) is wrong on two counts: a portrait video
-    (TikTok, Shorts, Reels) reports its height as the *long* side, so "720p" 720x1280 content
+    (Shorts, Reels) reports its height as the *long* side, so "720p" 720x1280 content
     fails a ``height<=720`` test and the selector falls through to an unbounded alternative -
     the user picks 720p and gets 1080p instead; and a format with no ``height`` at all (some
     audio-only or oddly reported formats) is excluded outright instead of just ranked last.

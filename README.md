@@ -56,7 +56,7 @@ Paste a link, check the preview, pick a format, and keep working while it downlo
 | 🧰 **Batteries included** | ffmpeg/ffprobe (LGPL build) and the Deno JavaScript runtime ship inside the package. Nothing else to install. |
 | 🌍 **Bilingual setup** | The installer and uninstaller speak English and Turkish. |
 
-> Download engines for TikTok, X, Reddit, SoundCloud, Twitch and Dailymotion are already built, but their screens are not finished yet, so the app does not offer them in 1.0.
+> Arnold DW focuses on YouTube and Instagram. Other sites are not offered in the app.
 
 ## System requirements
 
