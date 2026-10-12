@@ -52,6 +52,8 @@ Bu dosya [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) biçimini izle
 - Üçüncü taraf görsel varlık kalmadı; GPL lisanslı Python kütüphanesi kullanılmaz.
 
 ### Performance
+- **Kurulum dosyası 138 MB → ~92 MB, kurulu boyut 476 MB → ~300 MB:** ffmpeg DLL'leri pakete iki kez giriyordu (PyInstaller bağımlılık analizi kopyalıyordu); artık bir kez kopyalanır. Kullanılmayan Pillow AVIF modülü ve isteğe bağlı yt-dlp eklentileri pakete girmez.
+- Sürüm sayfasında tek indirme: `ArnoldDW-<sürüm>-setup.exe` (taşınabilir ZIP artık yayınlanmıyor, `build.ps1 -Portable` ile yerelde üretilebilir).
 - Paket UPX olmadan derlenir (daha hızlı açılış, daha az antivirüs yanlış alarmı); test/derleme araçları ve kullanılmayan ağır modüller pakete girmez.
 - Kurucu LZMA2/ultra64 ile sıkıştırılır.
 

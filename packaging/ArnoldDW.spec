@@ -90,6 +90,9 @@ a = Analysis(
         "PyInstaller", "ruff", "IPython", "numpy", "matplotlib", "pandas", "lib2to3", "pydoc_data",
         # Optional yt-dlp extras the app does not use (browser impersonation, Linux keyring).
         "curl_cffi", "secretstorage", "jeepney", "websockets",
+        # Pillow's AVIF codec (7.5 MB); thumbnails are JPEG/PNG/WebP. The plugin degrades
+        # gracefully when the module is missing.
+        "PIL._avif",
     ],
     noarchive=False,
     optimize=0,
