@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - "v*"
+  # Manual release from the Actions tab: builds the selected branch and creates the
+  # v<__version__> tag on that commit together with the GitHub Release.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -72,9 +75,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ARNOLD_DW_RELEASE_KEY: ${{ secrets.ARNOLD_DW_RELEASE_KEY }}
         run: |
-          $tag = "${{ github.ref_name }}"
           $version = (& python -c "from arnold_dw import __version__; print(__version__)").Trim()
-          if ($tag -ne "v$version") { throw "Release tag $tag does not match package version v$version" }
+          if ("${{ github.event_name }}" -eq "push") {
+            $tag = "${{ github.ref_name }}"
+            if ($tag -ne "v$version") { throw "Release tag $tag does not match package version v$version" }
+          } else {
+            $tag = "v$version"
+            if (git ls-remote --tags origin "refs/tags/$tag") { throw "Tag $tag already exists; bump __version__ first." }
+          }
           $notes = $null
           $changelog = Join-Path $PWD "CHANGELOG.md"
           if (Test-Path -LiteralPath $changelog) {
@@ -88,7 +96,6 @@ jobs:
               Set-Content -LiteralPath $notes -Value $match.Groups[1].Value.Trim() -Encoding UTF8
             }
           }
-          $zip = "dist/ArnoldDW-$version-win64.zip"
           $setup = "dist/ArnoldDW-$version-setup.exe"
           $published = (Get-Date).ToUniversalTime().ToString("o")
           $setupUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$tag/ArnoldDW-$version-setup.exe"
@@ -97,7 +104,8 @@ jobs:
             "--published", $published, "--setup-url", $setupUrl, "--output", "dist/latest.json"
           )
           if ($notes) { $manifestArgs += @("--notes-file", $notes) }
-          $assets = @($zip, $setup)
+          # The setup wizard is the one download users need; it is what "Latest" offers.
+          $assets = @($setup)
           if ($env:ARNOLD_DW_RELEASE_KEY) {
             & python @manifestArgs
             if ($LASTEXITCODE -ne 0) { throw "Update manifest generation failed." }
@@ -108,7 +116,8 @@ jobs:
             Write-Warning "ARNOLD_DW_RELEASE_KEY is not set; latest.json is not published."
           }
           if ($notes) {
-            gh release create $tag @assets --title "Arnold DW $version" --notes-file $notes
+            gh release create $tag @assets --target $env:GITHUB_SHA --latest --title "Arnold DW $version" --notes-file $notes
           } else {
-            gh release create $tag @assets --title "Arnold DW $version" --generate-notes
+            gh release create $tag @assets --target $env:GITHUB_SHA --latest --title "Arnold DW $version" --generate-notes
           }
+          if ($LASTEXITCODE -ne 0) { throw "Creating the GitHub Release failed." }

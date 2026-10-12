@@ -56,7 +56,17 @@ version_info = VSVersionInfo(
     ],
 )
 
-datas = [(str(ROOT / "logo"), "logo"), (str(ROOT / "bin"), "bin")]
+datas = [(str(ROOT / "logo"), "logo")]
+# ffmpeg/ffprobe DLLs and deno.exe go straight into COLLECT as plain files. Passed through
+# Analysis they are reclassified as binaries and their DLL dependencies are copied a second
+# time into _internal/, which doubled the ffmpeg footprint.
+runtime_files = [
+    (f"bin/{path.name}", str(path), "DATA")
+    for path in sorted((ROOT / "bin").iterdir())
+    if path.is_file() and path.suffix.lower() in {".exe", ".dll"}
+]
+if not any(name == "bin/ffmpeg.exe" for name, _, _ in runtime_files):
+    raise SystemExit("bin/ffmpeg.exe is missing: run tools/fetch_binaries.py first")
 datas += [(str(ROOT / "THIRD_PARTY_NOTICES.md"), "."), (str(ROOT / "licenses"), "licenses")]
 binaries = []
 hiddenimports = collect_submodules("yt_dlp")
@@ -78,6 +88,11 @@ a = Analysis(
     excludes=[
         "tkinter.test", "mutagen", "pytest", "_pytest", "pip", "setuptools", "pkg_resources",
         "PyInstaller", "ruff", "IPython", "numpy", "matplotlib", "pandas", "lib2to3", "pydoc_data",
+        # Optional yt-dlp extras the app does not use (browser impersonation, Linux keyring).
+        "curl_cffi", "secretstorage", "jeepney", "websockets",
+        # Pillow's AVIF codec (7.5 MB); thumbnails are JPEG/PNG/WebP. The plugin degrades
+        # gracefully when the module is missing.
+        "PIL._avif",
     ],
     noarchive=False,
     optimize=0,
@@ -105,7 +120,7 @@ exe = EXE(
 coll = COLLECT(
     exe,
     a.binaries,
-    a.datas,
+    a.datas + runtime_files,
     strip=False,
     upx=False,
     upx_exclude=[],

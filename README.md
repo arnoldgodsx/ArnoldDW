@@ -61,7 +61,7 @@ Paste a link, check the preview, pick a format, and keep working while it downlo
 ## System requirements
 
 - Windows 10 or Windows 11, 64-bit (x64)
-- A few hundred MB of free disk space for the app (it bundles Python, ffmpeg and Deno), plus space for your downloads
+- About 310 MB of free disk space for the app (it bundles Python, ffmpeg and Deno), plus space for your downloads
 - An internet connection
 
 No Python, ffmpeg or other tools need to be installed separately.
@@ -70,7 +70,7 @@ No Python, ffmpeg or other tools need to be installed separately.
 
 ### Setup wizard (recommended)
 
-1. Go to the [latest release](https://github.com/arnoldgodsx/ArnoldDW/releases/latest) and download **`ArnoldDW-<version>-setup.exe`**.
+1. Go to the [latest release](https://github.com/arnoldgodsx/ArnoldDW/releases/latest) and download **`ArnoldDW-<version>-setup.exe`** — a single file of about 90 MB that contains everything.
 2. Run it. The installer is not code-signed yet, so Windows SmartScreen may show *"Windows protected your PC"*. After making sure you downloaded the file from the official release page, choose **More info → Run anyway**.
 3. Walk through the wizard:
 
@@ -82,10 +82,6 @@ No Python, ffmpeg or other tools need to be installed separately.
    | Destination | Keep the default folder or pick another one |
    | Shortcuts | A Start menu folder is always created; a desktop shortcut is optional |
    | Finish | Optionally launch Arnold DW right away |
-
-### Portable ZIP
-
-Prefer not to install anything? Download **`ArnoldDW-<version>-win64.zip`** from the same release page, extract it anywhere (a USB stick works), and run `Arnold DW.exe`. Settings and history are still stored in `%APPDATA%\Arnold DW`.
 
 ### Silent / unattended install
 
@@ -172,19 +168,22 @@ python -m pytest                  # unit tests; network tests are skipped
 python -m pytest --network        # also run the live network tests
 ```
 
-### Build the app, portable ZIP and setup wizard
+### Build the app and the setup wizard
 
 ```powershell
 .\tools\build.ps1                       # uses .venv\Scripts\python.exe by default
 .\tools\build.ps1 -RequireInstaller     # fail if Inno Setup is missing
+.\tools\build.ps1 -Portable             # also produce a portable ZIP
 ```
+
+The build prints a size report of the largest files so packaging regressions are easy to spot.
 
 Output in `dist\`:
 
 | File | Description |
 | --- | --- |
 | `dist\Arnold DW\` | The PyInstaller one-folder app |
-| `ArnoldDW-<version>-win64.zip` | Portable package |
+| `ArnoldDW-<version>-win64.zip` | Portable package (only with `-Portable`) |
 | `ArnoldDW-<version>-setup.exe` | Setup wizard with uninstaller |
 
 To verify an installer end to end (silent install → shortcuts and *Installed apps* entry → launch → uninstall while running → everything removed):
@@ -223,9 +222,9 @@ The architecture, contribution recipes and update/threat model are described in 
 
 1. Set `__version__` in `arnold_dw/__init__.py` (for example `1.0.1`).
 2. Move the `[Unreleased]` entries in `CHANGELOG.md` under a new `## [1.0.1] - YYYY-MM-DD` heading.
-3. Push a matching tag: `git tag v1.0.1 && git push origin v1.0.1`.
+3. Either push a matching tag (`git tag v1.0.1 && git push origin v1.0.1`) or open **Actions → Release → Run workflow** on `main`, which creates the tag for you.
 
-The [release workflow](.github/workflows/release.yml) lints, tests, builds the app, ZIP and setup wizard, runs the installer smoke test, and publishes a GitHub Release with the changelog section as release notes. When the `ARNOLD_DW_RELEASE_KEY` secret is configured it also publishes a signed `latest.json` update manifest. The full checklist is in [docs/yayin.md](docs/yayin.md).
+The [release workflow](.github/workflows/release.yml) lints, tests, builds the app and the setup wizard, runs the installer smoke test, and publishes a GitHub Release whose only download is `ArnoldDW-<version>-setup.exe`, with the changelog section as release notes. When the `ARNOLD_DW_RELEASE_KEY` secret is configured it also publishes a signed `latest.json` update manifest. The full checklist is in [docs/yayin.md](docs/yayin.md).
 
 ## Security
 

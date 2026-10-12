@@ -80,4 +80,4 @@ Depo kökünde Windows sanal ortamı oluşturup `requirements.txt` ve `requireme
 
 ## Sürüm yayınlama
 
-Sürüm numarasını `arnold_dw/__init__.py` içindeki `__version__` ile uyumlu tutun. `v<version>` etiketi `.github/workflows/release.yml` akışını başlatır; lint ve testlerden sonra Windows kurulum ve taşınabilir ZIP çıktıları üretilir. Akış tag ile uygulama sürümünün eşleşmesini zorunlu tutar, GitHub Release'e dosyaları ekler ve kurulum URL'si, boyutu, SHA-256'sı, sürüm/tarih/notlar içeren `latest.json` manifestini yayımlar.
+Sürüm numarasını `arnold_dw/__init__.py` içindeki `__version__` ile uyumlu tutun. `v<version>` etiketi veya Actions sekmesinden **Release → Run workflow** `.github/workflows/release.yml` akışını başlatır (elle başlatmada etiketi akış oluşturur); lint ve testlerden sonra Windows kurulum dosyası üretilir, kurulum testi yapılır ve sürüme tek indirme olarak eklenir. Akış tag ile uygulama sürümünün eşleşmesini zorunlu tutar, GitHub Release'e dosyaları ekler ve kurulum URL'si, boyutu, SHA-256'sı, sürüm/tarih/notlar içeren `latest.json` manifestini yayımlar.

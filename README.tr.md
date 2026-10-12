@@ -21,11 +21,11 @@ TikTok, X, Reddit ve diğer siteler için indirme motoru hazır, ancak arayüz e
 
 Gereksinim: Windows 10 veya 11 (64 bit).
 
-1. [GitHub Releases](https://github.com/arnoldgodsx/ArnoldDW/releases/latest) sayfasından `ArnoldDW-1.0.0-setup.exe` dosyasını indirin.
+1. [GitHub Releases](https://github.com/arnoldgodsx/ArnoldDW/releases/latest) sayfasından `ArnoldDW-1.0.0-setup.exe` dosyasını indirin (her şeyi içeren tek dosya, yaklaşık 90 MB).
 2. Çalıştırın. SmartScreen "Bilinmeyen yayıncı" uyarısı verirse (kurucu kod imzalı değildir) **Daha fazla bilgi → Yine de çalıştır**'ı seçin.
 3. Sihirbazı izleyin: dil → kurulum kapsamı (tüm kullanıcılar / yalnızca ben) → kullanım koşulları → kurulum klasörü → isteğe bağlı masaüstü kısayolu → kur.
 
-Kurulum istemeyenler için aynı sayfada taşınabilir `ArnoldDW-1.0.0-win64.zip` paketi de vardır. Yeni sürümü kurmak için kurucuyu yeniden çalıştırmanız yeterlidir; ayarlarınız ve geçmişiniz korunur.
+Yeni sürümü kurmak için kurucuyu yeniden çalıştırmanız yeterlidir; ayarlarınız ve geçmişiniz korunur.
 
 ## Kaldırma
 

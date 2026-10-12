@@ -13,7 +13,6 @@ Bu liste GitHub Actions'taki `.github/workflows/release.yml` akışına göre ha
 
 Windows akışı uygulamayı derler ve şu dosyaları üretip GitHub Release'e ekler:
 
-- `ArnoldDW-X.Y.Z-win64.zip`: taşınabilir uygulama paketi.
 - `ArnoldDW-X.Y.Z-setup.exe`: Inno Setup kurucusu.
 - `latest.json`: kurulum dosyasının sürümünü, indirme adresini, boyutunu ve SHA-256 özetini içeren güncelleme manifesti.
 
@@ -25,13 +24,12 @@ Akış, yayından önce `tools/installer_smoke.ps1` ile kurucuyu temiz runner'da
 
 Sanal makine veya Arnold DW'nin önceden kurulmadığı temiz bir Windows hesabı kullanın.
 
-1. [ ] GitHub Release sayfasında sürüm etiketi, notlar ve üç çıktının da bulunduğunu; zip ile kurulum dosyalarının sürüm adlarının doğru olduğunu kontrol edin.
+1. [ ] GitHub Release sayfasında sürüm etiketi, notlar ve kurulum dosyasının (gerekirse `latest.json`) bulunduğunu, dosya adındaki sürümün doğru olduğunu kontrol edin.
 2. [ ] `setup.exe` dosyasını indirin. Windows SmartScreen, kod imzalama sertifikası olmadığı için “Windows bilgisayarınızı korudu” / “Bilinmeyen yayıncı” uyarısı gösterebilir. Yayınlanan dosyanın kaynağını doğruladıktan sonra **Daha fazla bilgi → Yine de çalıştır** ile devam edin; bu uyarıyı imzalı uygulama gibi sunmayın.
 3. [ ] Kurulumu tamamlayın, Başlat menüsü veya masaüstü kısayolundan uygulamayı açın ve ana pencerenin hatasız geldiğini doğrulayın.
 4. [ ] YouTube ekranını açın; kısa ve herkese açık bir videonun önizlemesini yükleyin, MP4 veya MP3 indirmesini başlatıp tamamlandığını ve dosyanın seçili klasörde açılabildiğini doğrulayın.
 5. [ ] Instagram ekranında herkese açık bir gönderi önizlemesini yükleyin ve seçilebilir medya öğesinin indirme akışını doğrulayın. Platform erişim sınırları nedeniyle bu adımda kullanılabilir, herkese açık bir test gönderisi seçin.
 6. [ ] Uygulamayı kapatıp yeniden açın; seçilen indirme klasörünün korunduğunu kontrol edin. Kurulum kısayolunun ve kaldırma girişinin Windows uygulama listesinde bulunduğunu doğrulayın.
-7. [ ] Kurulum dosyasını ayrıca çalıştırmadan taşınabilir ZIP'i ayrı bir klasöre açın ve `Arnold DW.exe` uygulamasının açıldığını doğrulayın.
 
 ## Geri alma
 

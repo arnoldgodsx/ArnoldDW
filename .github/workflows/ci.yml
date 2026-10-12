@@ -33,7 +33,7 @@ jobs:
         run: python -m pytest
 
   package-smoke:
-    # Every push builds the app, the setup wizard and the portable ZIP, then installs,
+    # Every push builds the app and the setup wizard, then installs,
     # starts and uninstalls the result on a clean runner.
     if: github.event_name == 'push'
     needs: lint-and-test
@@ -72,7 +72,7 @@ jobs:
       - name: Install Inno Setup 6
         run: choco install innosetup --no-progress -y
 
-      - name: Build app, portable ZIP and setup wizard
+      - name: Build app and setup wizard
         shell: pwsh
         run: .\tools\build.ps1 -Python (Get-Command python).Source -RequireInstaller
 
@@ -99,8 +99,6 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: ArnoldDW-${{ github.sha }}-win64
-          path: |
-            dist/ArnoldDW-*-win64.zip
-            dist/ArnoldDW-*-setup.exe
+          name: ArnoldDW-${{ github.sha }}-setup
+          path: dist/ArnoldDW-*-setup.exe
           retention-days: 7
