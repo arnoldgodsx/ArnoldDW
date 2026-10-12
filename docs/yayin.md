@@ -4,10 +4,10 @@ Bu liste GitHub Actions'taki `.github/workflows/release.yml` akışına göre ha
 
 ## Yayın öncesi
 
-- [ ] `arnold_dw/__init__.py` içindeki `__version__` değerini yayınlanacak kararlı sürüme yükseltin (ör. `2.1.0`). Geliştirme son ekini (`.dev0`) kaldırın.
+- [ ] `arnold_dw/__init__.py` içindeki `__version__` değerini yayınlanacak kararlı sürüme yükseltin (ör. `1.0.1`). Geliştirme son ekini (`.dev0`) kaldırın.
 - [ ] `CHANGELOG.md` içindeki `[Unreleased]` değişikliklerini yeni sürüm başlığı ve yayın tarihi altında toplayın; sonraki çalışmalar için boş bir `[Unreleased]` bölümü bırakın.
 - [ ] Değişiklikleri gözden geçirin ve CI'nin lint ile test adımlarının başarılı olduğunu doğrulayın.
-- [ ] Etiketi sürümle birebir aynı oluşturun: `vX.Y.Z` = `__version__` (ör. `v2.1.0`). Bu etiketi göndermek `release.yml` akışını başlatır.
+- [ ] Etiketi sürümle birebir aynı oluşturun: `vX.Y.Z` = `__version__` (ör. `v1.0.1`). Bu etiketi göndermek `release.yml` akışını başlatır.
 
 ## GitHub Release çıktıları
 
@@ -17,7 +17,9 @@ Windows akışı uygulamayı derler ve şu dosyaları üretip GitHub Release'e e
 - `ArnoldDW-X.Y.Z-setup.exe`: Inno Setup kurucusu.
 - `latest.json`: kurulum dosyasının sürümünü, indirme adresini, boyutunu ve SHA-256 özetini içeren güncelleme manifesti.
 
-Release notları eşleşen `CHANGELOG.md` sürüm bölümünden alınır. Şu an manifestin bütünlüğü SHA-256 ile denetlenir; manifest için dijital imza üretilmiyor veya doğrulanmıyor. İmzalı `latest.json` desteği CX-1-T22 değişikliği merge edildikten sonra ayrıca doğrulanmalıdır.
+Release notları eşleşen `CHANGELOG.md` sürüm bölümünden alınır. `latest.json` Ed25519 ile imzalanır ve yalnızca `ARNOLD_DW_RELEASE_KEY` deposu sırrı tanımlıysa yayınlanır; sır yoksa akış uyarı verip manifestsiz yayın yapar.
+
+Akış, yayından önce `tools/installer_smoke.ps1` ile kurucuyu temiz runner'da sessizce kurar, kısayolları ve Uygulamalar girişini denetler, uygulamayı başlatır ve açıkken kaldırır; herhangi bir adım başarısız olursa yayın yapılmaz.
 
 ## Temiz Windows kurulum duman testi
 

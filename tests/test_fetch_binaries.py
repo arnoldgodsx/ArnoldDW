@@ -164,7 +164,39 @@ def test_fetch_tool_extracts_ffmpeg_pair_and_shared_libraries(tmp_path, monkeypa
 
 
 def test_runtime_archives_are_pinned_to_requested_releases():
-    assert fetch_binaries.TOOLS["ffmpeg"]["archive_sha256"] == "8ee8dcffde407fe78381b8d5888a0d19dca5e20fb26cdadba78c1bbc03043e30"
-    assert "autobuild-2026-09-27-13-04" in fetch_binaries.TOOLS["ffmpeg"]["url"]
+    assert fetch_binaries.TOOLS["ffmpeg"]["archive_sha256"] == "de3f3b16b3dbf2038a56878aa35795f48bd220f01479697e008470773cecba5b"
+    assert "autobuild-2026-10-12-13-12" in fetch_binaries.TOOLS["ffmpeg"]["url"]
     assert fetch_binaries.TOOLS["deno"]["version"] == "2.9.7"
     assert fetch_binaries.TOOLS["deno"]["archive_sha256"] == "a0c3101b4158d1dfb7d6a78a7bf0f3de80c96bb423c152beec8beb22786f2238"
+
+
+def test_download_falls_back_to_project_mirror_and_keeps_archive(tmp_path, monkeypatch):
+    payload = b"verified archive"
+    tool = {
+        "version": "1",
+        "url": "https://github.com/upstream/releases/download/tag/tool.zip",
+        "archive_sha256": hashlib.sha256(payload).hexdigest(),
+        "max_archive_bytes": 1000,
+    }
+    tried = []
+
+    def fake_download(url, destination, _max_bytes):
+        tried.append(url)
+        if "upstream" in url:
+            raise fetch_binaries.urllib.error.HTTPError(url, 404, "Not Found", None, None)
+        destination.write_bytes(payload)
+
+    monkeypatch.setattr(fetch_binaries, "download", fake_download)
+    archive = tmp_path / "download.zip"
+    fetch_binaries.download_verified_archive("tool", tool, archive)
+
+    assert tried == [tool["url"], fetch_binaries.MIRROR_BASE_URL + "tool.zip"]
+    assert archive.read_bytes() == payload
+
+
+def test_download_rejects_mirror_with_wrong_hash(tmp_path, monkeypatch):
+    tool = {"version": "1", "url": "https://github.com/u/tool.zip", "archive_sha256": "0" * 64, "max_archive_bytes": 10}
+    monkeypatch.setattr(fetch_binaries, "download", lambda _u, destination, _m: destination.write_bytes(b"x"))
+    with pytest.raises(ValueError, match="SHA-256 mismatch"):
+        fetch_binaries.download_verified_archive("tool", tool, tmp_path / "a.zip")
+    assert not (tmp_path / "a.zip").exists()

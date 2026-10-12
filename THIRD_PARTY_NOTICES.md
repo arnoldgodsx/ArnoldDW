@@ -133,10 +133,10 @@ Uygulama logosu, uygulama simgesi (`logo/icon.ico`, `logo/app-logo.png`) ve tüm
 
 ### FFmpeg
 
-- **Version:** `tools/fetch_binaries.py` downloads the Windows x64 LGPL shared FFmpeg `n9.0.2-12-gc867e13549` asset from BtbN release tag `autobuild-2026-09-27-13-04`. Archive SHA-256: `8ee8dcffde407fe78381b8d5888a0d19dca5e20fb26cdadba78c1bbc03043e30`.
-- **Included files:** `ffmpeg.exe`, `ffprobe.exe`, and the DLLs in the same release archive; `ffplay.exe` is omitted. The archive is 76,974,545 bytes and the extracted files total 156,943,360 bytes. The same-date LGPL static archive is 171,535,547 bytes, so the shared variant has the smaller installed footprint.
+- **Version:** `tools/fetch_binaries.py` downloads the Windows x64 LGPL shared FFmpeg `n9.0.2-27-g7e93014c5b` asset from BtbN release tag `autobuild-2026-10-12-13-12`. Archive SHA-256: `de3f3b16b3dbf2038a56878aa35795f48bd220f01479697e008470773cecba5b`. Because BtbN prunes old autobuilds, the release workflow also mirrors this exact, hash-verified archive to this repository's `runtime-binaries` release.
+- **Included files:** `ffmpeg.exe`, `ffprobe.exe`, and the DLLs in the same release archive; `ffplay.exe` is omitted. The archive is 77,230,796 bytes and the extracted files total 157,248,512 bytes. The shared variant has a smaller installed footprint than the LGPL static build.
 - **License:** LGPL version 3 or later, shared build. `ffmpeg -version` reports `--enable-version3`; its configuration contains no `--enable-gpl`, and `ffmpeg -L` prints LGPL v3 terms.
-- **Project and source:** [Pinned BtbN release](https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-09-27-13-04), [BtbN build repository](https://github.com/BtbN/FFmpeg-Builds), [FFmpeg n9.0.2 source](https://github.com/FFmpeg/FFmpeg/tree/n9.0.2), and [FFmpeg license information](https://ffmpeg.org/legal.html).
+- **Project and source:** [Pinned BtbN release](https://github.com/BtbN/FFmpeg-Builds/releases/tag/autobuild-2026-10-12-13-12), [BtbN build repository](https://github.com/BtbN/FFmpeg-Builds), [FFmpeg n9.0.2 source](https://github.com/FFmpeg/FFmpeg/tree/n9.0.2), and [FFmpeg license information](https://ffmpeg.org/legal.html).
 - **Copyright:** FFmpeg developers and BtbN Windows build contributors. Copyright and license notices for bundled DLL components remain applicable.
 - **Full license text:** [licenses/FFmpeg-LGPL-3.0.txt](licenses/FFmpeg-LGPL-3.0.txt), copied from FFmpeg n9.0.2's official `COPYING.LGPLv3` source file. The LGPL 2.1 text is included as well; the old GPL text does not describe this selected build.
 

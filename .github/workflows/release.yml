@@ -36,9 +36,35 @@ jobs:
       - name: Install Inno Setup 6
         run: choco install innosetup --no-progress -y
 
+      - name: Fetch pinned runtime binaries and mirror their archives
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python tools/fetch_binaries.py --archive-dir build/runtime-archives
+          if ($LASTEXITCODE -ne 0) { throw "Fetching runtime binaries failed." }
+          # Upstream FFmpeg autobuilds are pruned after a few weeks; keep the exact verified
+          # archives on a prerelease so tools/fetch_binaries.py can fall back to them.
+          gh release view runtime-binaries *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create runtime-binaries --prerelease --latest=false `
+              --title "Runtime binaries (build mirror)" `
+              --notes "SHA-256-pinned ffmpeg and Deno archives used by tools/fetch_binaries.py. Not an app release."
+            if ($LASTEXITCODE -ne 0) { throw "Could not create the runtime-binaries release." }
+          }
+          $archives = (Get-ChildItem build/runtime-archives -File).FullName
+          gh release upload runtime-binaries @archives --clobber
+          if ($LASTEXITCODE -ne 0) { throw "Mirroring runtime archives failed." }
+
       - name: Build release artifacts
         shell: pwsh
-        run: .\tools\build.ps1 -Python (Get-Command python).Source
+        run: .\tools\build.ps1 -Python (Get-Command python).Source -RequireInstaller
+
+      - name: Install, launch and uninstall with the setup wizard
+        shell: pwsh
+        run: |
+          $version = (& python -c "from arnold_dw import __version__; print(__version__)").Trim()
+          .\tools\installer_smoke.ps1 -Setup "dist/ArnoldDW-$version-setup.exe"
 
       - name: Create GitHub Release
         shell: pwsh
@@ -71,10 +97,18 @@ jobs:
             "--published", $published, "--setup-url", $setupUrl, "--output", "dist/latest.json"
           )
           if ($notes) { $manifestArgs += @("--notes-file", $notes) }
-          & python @manifestArgs
-          if ($LASTEXITCODE -ne 0) { throw "Update manifest generation failed." }
-          if ($notes) {
-            gh release create $tag $zip $setup dist/latest.json --title "Arnold DW $version" --notes-file $notes
+          $assets = @($zip, $setup)
+          if ($env:ARNOLD_DW_RELEASE_KEY) {
+            & python @manifestArgs
+            if ($LASTEXITCODE -ne 0) { throw "Update manifest generation failed." }
+            $assets += "dist/latest.json"
           } else {
-            gh release create $tag $zip $setup dist/latest.json --title "Arnold DW $version" --generate-notes
+            # The in-app updater is not wired to the UI yet; publish without a manifest
+            # rather than fail the release when the signing secret is not configured.
+            Write-Warning "ARNOLD_DW_RELEASE_KEY is not set; latest.json is not published."
+          }
+          if ($notes) {
+            gh release create $tag @assets --title "Arnold DW $version" --notes-file $notes
+          } else {
+            gh release create $tag @assets --title "Arnold DW $version" --generate-notes
           }

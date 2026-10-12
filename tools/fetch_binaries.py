@@ -20,9 +20,9 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 TOOLS: dict[str, dict[str, Any]] = {
     "ffmpeg": {
-        "version": "9.0.2-12-gc867e13549 (LGPL shared, autobuild-2026-09-27-13-04)",
-        "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-09-27-13-04/ffmpeg-n9.0.2-12-gc867e13549-win64-lgpl-shared-9.0.zip",
-        "archive_sha256": "8ee8dcffde407fe78381b8d5888a0d19dca5e20fb26cdadba78c1bbc03043e30",
+        "version": "9.0.2-27-g7e93014c5b (LGPL shared, autobuild-2026-10-12-13-12)",
+        "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-12-13-12/ffmpeg-n9.0.2-27-g7e93014c5b-win64-lgpl-shared-9.0.zip",
+        "archive_sha256": "de3f3b16b3dbf2038a56878aa35795f48bd220f01479697e008470773cecba5b",
         "max_archive_bytes": 120_000_000,
         "archive_member": "bin/ffmpeg.exe",
         "destination_dir": "bin",
@@ -32,15 +32,15 @@ TOOLS: dict[str, dict[str, Any]] = {
         "configuration_check": "--enable-shared",
         "forbidden_configuration": "--enable-gpl",
         "output_sha256": {
-            "ffmpeg.exe": "2c024f25b3ccfed2b860e45846d0be20298f76133b3476bbcce2d2907fc89cea",
-            "ffprobe.exe": "851cf0f640639c0231048cb6ce60e97caf90db5fd6c1f0ed74e69873a6af1559",
-            "avcodec-63.dll": "f9520ee939e4eeca8d63bb8d5f8518233a0d855199048c2b0909586d88c6fb1a",
-            "avdevice-63.dll": "d7dbc4f2c9cca0b411368abcaef5cf0fc4769612ab52220defa870a74629af1e",
-            "avfilter-12.dll": "088cb395e95b9f6463e44e071f35a5ea1de18293d4f3f48d70e26729c95bf162",
-            "avformat-63.dll": "216f2b4ef19abd016beaea4a5875508fb3faa4b4bf34d4c03933b17d60ecf54f",
-            "avutil-61.dll": "bf37b7814bf0edf663100095d70405a84c041adb1df368cd6bd63af4c62c4a2e",
-            "swresample-7.dll": "febf67935243d03e9f073a411da519d6072d9a6d5e7da242f71fe3c26a7384be",
-            "swscale-10.dll": "1a398639c5a36cd078beb0087a1c341e5d2656073267455440eca93d21534dec",
+            "ffmpeg.exe": "1f1334bab3fd4c8086b01dd1f618f2a3a453dfa39429b3a65a13b40502a194e3",
+            "ffprobe.exe": "19cfb4211cc00c19591058ab06cd171eeec1dadc5296207e6f6d3414232380a5",
+            "avcodec-63.dll": "501c1abd17650647ac829f72c5aa24379eb80e47c001163900da64cec36d68c6",
+            "avdevice-63.dll": "33cd7781840597b09b68acb2d75491571ce238f4fcb83465942e6989df12374f",
+            "avfilter-12.dll": "3541c6d1af33ae7919dfe945ed5e81fffd50741d948e535d9f0013935fc26d75",
+            "avformat-63.dll": "4a598e944123550f3b4f09f5635dd6cf7b2c8b083ac21e2192e1a6290077ebef",
+            "avutil-61.dll": "bf15dba19fcc23ba4a79faabae11705e8db0e8647a2003d7efdb0075fa9536c2",
+            "swresample-7.dll": "6f1033a18a11358d6665bf80d07b57ff63efe8529e5cc8e73d49b07ddfc3fbe7",
+            "swscale-10.dll": "fb7562f214f93743962bbb7879577b11bc8b52a589027fd220e14237b7d0c133",
         },
     },
     "deno": {
@@ -58,6 +58,9 @@ TOOLS: dict[str, dict[str, Any]] = {
         },
     },
 }
+# Upstream autobuilds (BtbN) are pruned after a few weeks. The release workflow copies
+# each verified archive to this release so pinned builds stay reproducible.
+MIRROR_BASE_URL = "https://github.com/arnoldgodsx/ArnoldDW/releases/download/runtime-binaries/"
 CHUNK_SIZE = 1024 * 1024
 ALLOWED_DOWNLOAD_HOSTS = frozenset({"github.com", "objects.githubusercontent.com", "release-assets.githubusercontent.com"})
 
@@ -106,12 +109,37 @@ def safe_member(archive: zipfile.ZipFile, expected_suffix: str) -> zipfile.ZipIn
     return matches[0]
 
 
-def fetch_tool(name: str, force: bool = False) -> Path:
+def archive_name(tool: dict[str, Any]) -> str:
+    return PurePosixPath(urllib.parse.urlparse(tool["url"]).path).name
+
+
+def candidate_urls(tool: dict[str, Any]) -> list[str]:
+    """The pinned upstream URL first, then this project's mirror of the same archive."""
+    return [tool["url"], MIRROR_BASE_URL + archive_name(tool)]
+
+
+def download_verified_archive(name: str, tool: dict[str, Any], archive_path: Path) -> None:
+    errors = []
+    for url in candidate_urls(tool):
+        print(f"Downloading {name} {tool['version']} from {url}")
+        try:
+            download(url, archive_path, tool["max_archive_bytes"])
+            archive_hash = sha256_file(archive_path)
+            if archive_hash != tool["archive_sha256"]:
+                raise ValueError(f"{name} archive SHA-256 mismatch: {archive_hash}")
+            return
+        except (OSError, ValueError, urllib.error.URLError) as exc:
+            errors.append(f"{url}: {exc}")
+            archive_path.unlink(missing_ok=True)
+    raise ValueError(f"Could not download a verified {name} archive; " + "; ".join(errors))
+
+
+def fetch_tool(name: str, force: bool = False, archive_dir: Path | None = None) -> Path:
     tool = TOOLS[name]
     destination_dir = ROOT / tool["destination_dir"]
     destination = destination_dir / tool.get("destination_name", name + ".exe")
     expected_outputs = tool.get("output_sha256")
-    if destination.is_file() and not force:
+    if destination.is_file() and not force and archive_dir is None:
         if expected_outputs:
             valid_outputs = all(
                 (destination_dir / filename).is_file()
@@ -131,11 +159,10 @@ def fetch_tool(name: str, force: bool = False) -> Path:
     with tempfile.TemporaryDirectory(prefix=f".fetch-{name}-", dir=destination_dir) as temporary_dir:
         temporary = Path(temporary_dir)
         archive_path = temporary / "download.zip"
-        print(f"Downloading {name} {tool['version']} from {tool['url']}")
-        download(tool["url"], archive_path, tool["max_archive_bytes"])
-        archive_hash = sha256_file(archive_path)
-        if archive_hash != tool["archive_sha256"]:
-            raise ValueError(f"{name} archive SHA-256 mismatch: {archive_hash}")
+        download_verified_archive(name, tool, archive_path)
+        if archive_dir is not None:
+            archive_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(archive_path, archive_dir / archive_name(tool))
 
         with zipfile.ZipFile(archive_path) as archive:
             if tool.get("include_bin_files"):
@@ -202,12 +229,14 @@ def fetch_tool(name: str, force: bool = False) -> Path:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--force", action="store_true", help="download and replace binaries even if valid")
+    parser.add_argument("--archive-dir", type=Path,
+                        help="also keep each verified archive here (for mirroring); implies a fresh download")
     parser.add_argument("tools", nargs="*", choices=sorted(TOOLS), help="tools to fetch (default: all)")
     args = parser.parse_args()
     selected_tools = args.tools or list(TOOLS)
     try:
         for tool_name in selected_tools:
-            fetch_tool(tool_name, force=args.force)
+            fetch_tool(tool_name, force=args.force, archive_dir=args.archive_dir)
     except (OSError, ValueError, zipfile.BadZipFile, urllib.error.URLError, subprocess.TimeoutExpired) as exc:
         print(f"Binary fetch failed: {exc}", file=sys.stderr)
         return 1
