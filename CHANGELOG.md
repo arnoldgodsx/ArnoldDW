@@ -7,7 +7,7 @@ Bu dosya [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) biçimini izle
 ## [1.1.0] - 2026-10-12
 
 ### Changed
-- **Kurulum dosyası ~92 MB → ~20 MB:** ffmpeg ve Deno artık kurucunun içinde değil; uygulama ilk açılışta şık bir kurulum ekranıyla indirir (ilerleme, hız, hata durumunda "Tekrar dene"). Bu yalnızca bir kez yapılır.
+- **Kurulum dosyası ~92 MB → ~22 MB:** ffmpeg ve Deno artık kurucunun içinde değil; uygulama ilk açılışta şık bir kurulum ekranıyla indirir (ilerleme, hız, hata durumunda "Tekrar dene"). Bu yalnızca bir kez yapılır.
 - **İlk açılış indirmesi ~71 MB:** bileşenler yalnızca gereken dosyaları içeren xz paketleri olarak indirilir (kaynak arşivler ~120 MB). Her dosya SHA-256 ile doğrulanır; paket bulunamazsa resmî kaynak arşivlerine geri düşülür.
 - Bileşenler `%LOCALAPPDATA%\Arnold DW\runtime` altına kurulur ve kaldırıcı tarafından silinir.
 

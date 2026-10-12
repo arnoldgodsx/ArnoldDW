@@ -70,7 +70,7 @@ No Python, ffmpeg or other tools need to be installed separately.
 
 ### Setup wizard (recommended)
 
-1. Go to the [latest release](https://github.com/arnoldgodsx/ArnoldDW/releases/latest) and download **`ArnoldDW-<version>-setup.exe`** — a single, small file.
+1. Go to the [latest release](https://github.com/arnoldgodsx/ArnoldDW/releases/latest) and download **`ArnoldDW-<version>-setup.exe`** — a single file of about 22 MB.
 2. Run it. The installer is not code-signed yet, so Windows SmartScreen may show *"Windows protected your PC"*. After making sure you downloaded the file from the official release page, choose **More info → Run anyway**.
 3. Walk through the wizard:
 
