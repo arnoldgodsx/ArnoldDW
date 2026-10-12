@@ -36,6 +36,26 @@ jobs:
       - name: Install Inno Setup 6
         run: choco install innosetup --no-progress -y
 
+      - name: Fetch pinned runtime binaries and mirror their archives
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python tools/fetch_binaries.py --archive-dir build/runtime-archives
+          if ($LASTEXITCODE -ne 0) { throw "Fetching runtime binaries failed." }
+          # Upstream FFmpeg autobuilds are pruned after a few weeks; keep the exact verified
+          # archives on a prerelease so tools/fetch_binaries.py can fall back to them.
+          gh release view runtime-binaries *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create runtime-binaries --prerelease --latest=false `
+              --title "Runtime binaries (build mirror)" `
+              --notes "SHA-256-pinned ffmpeg and Deno archives used by tools/fetch_binaries.py. Not an app release."
+            if ($LASTEXITCODE -ne 0) { throw "Could not create the runtime-binaries release." }
+          }
+          $archives = (Get-ChildItem build/runtime-archives -File).FullName
+          gh release upload runtime-binaries @archives --clobber
+          if ($LASTEXITCODE -ne 0) { throw "Mirroring runtime archives failed." }
+
       - name: Build release artifacts
         shell: pwsh
         run: .\tools\build.ps1 -Python (Get-Command python).Source -RequireInstaller

@@ -31,6 +31,7 @@ Bu dosya [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) biçimini izle
 - Tanıtım sitesi paylaşım kartları, küçük ekran düzeni; lisans, kullanım ve sorun giderme belgeleri.
 
 ### Fixed
+- Derleme, sabitlenen ffmpeg arşivi kaynağında silindiği için başarısız oluyordu: ffmpeg `n9.0.2-27` LGPL derlemesine sabitlendi; arşivler yayın akışında projenin `runtime-binaries` sürümüne yedeklenir ve kaynak silinirse oradan (SHA-256 doğrulamalı) indirilir.
 - Her gece çalışan platform kontrolü (nightly) eski önbellek anahtarı yüzünden her gün başarısız oluyordu; düzeltildi.
 - Hızlı link değişiminde eski videonun önizlemesinin yeni linkin yerine geçmesi.
 - İptal edilen/başarısız indirmelerin yarım dosya bırakması; Instagram'da yarım dosyanın sonraki denemeyi engellemesi.
