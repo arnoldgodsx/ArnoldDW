@@ -3,7 +3,9 @@ param(
     [string]$Python = $(if ($env:ARNOLD_PY) { $env:ARNOLD_PY } else { ".\.venv\Scripts\python.exe" }),
     [switch]$ForceBinaries,
     # Fail instead of warning when Inno Setup is missing (release and CI builds).
-    [switch]$RequireInstaller
+    [switch]$RequireInstaller,
+    # Also produce the portable ArnoldDW-<version>-win64.zip.
+    [switch]$Portable
 )
 
 $ErrorActionPreference = "Stop"
@@ -32,11 +34,24 @@ try {
     $appExecutable = Join-Path $appDirectory "Arnold DW.exe"
     if (-not (Test-Path -LiteralPath $appExecutable)) { throw "PyInstaller output not found: $appExecutable" }
 
-    $zipPath = Join-Path $distPath "ArnoldDW-$version-win64.zip"
-    if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
-    Compress-Archive -Path (Join-Path $appDirectory "*") -DestinationPath $zipPath -CompressionLevel Optimal
-    $zipSize = (Get-Item -LiteralPath $zipPath).Length
     $installSize = (Get-ChildItem -LiteralPath $appDirectory -File -Recurse | Measure-Object -Property Length -Sum).Sum
+    Write-Host "Largest files in the app folder:"
+    Get-ChildItem -LiteralPath $appDirectory -File -Recurse | Sort-Object Length -Descending | Select-Object -First 25 |
+        ForEach-Object { "{0,8:N1} MB  {1}" -f ($_.Length / 1MB), $_.FullName.Substring($appDirectory.Length + 1) } | Write-Host
+    $internal = Join-Path $appDirectory "_internal"
+    Write-Host "Size by top-level entry under _internal:"
+    Get-ChildItem -LiteralPath $internal | ForEach-Object {
+        $size = if ($_.PSIsContainer) { (Get-ChildItem -LiteralPath $_.FullName -File -Recurse | Measure-Object -Property Length -Sum).Sum } else { $_.Length }
+        [pscustomobject]@{ Name = $_.Name; Size = $size }
+    } | Sort-Object Size -Descending | Select-Object -First 25 |
+        ForEach-Object { "{0,8:N1} MB  {1}" -f ($_.Size / 1MB), $_.Name } | Write-Host
+
+    if ($Portable) {
+        $zipPath = Join-Path $distPath "ArnoldDW-$version-win64.zip"
+        if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
+        Compress-Archive -Path (Join-Path $appDirectory "*") -DestinationPath $zipPath -CompressionLevel Optimal
+        $zipSize = (Get-Item -LiteralPath $zipPath).Length
+    }
 
     $iscc = (Get-Command "ISCC.exe" -ErrorAction SilentlyContinue).Source
     if (-not $iscc) {
@@ -70,9 +85,9 @@ try {
         Write-Warning "Inno Setup 6 was not found; portable ZIP was built, installer skipped."
     }
 
-    Write-Host "Build complete: $zipPath"
-    Write-Host "Installed files: $installSize bytes; portable ZIP: $zipSize bytes"
-    if ($setupPath) { Write-Host "Installer complete: $setupPath ($setupSize bytes)" }
+    Write-Host ("Build complete: {0} ({1:N1} MB installed)" -f $appDirectory, ($installSize / 1MB))
+    if ($zipPath) { Write-Host ("Portable ZIP: {0} ({1:N1} MB)" -f $zipPath, ($zipSize / 1MB)) }
+    if ($setupPath) { Write-Host ("Installer complete: {0} ({1:N1} MB)" -f $setupPath, ($setupSize / 1MB)) }
 }
 finally {
     Pop-Location
